@@ -6,4 +6,13 @@ requests
 numpy
 scikit-learn
 pandas
+plotlyFlask
+Flask-SQLAlchemy
+Flask-Login
+Flask-Bcrypt
+requests
+numpy
+scikit-learn
+pandas
 plotly
+python-dotenv
