@@ -230,40 +230,148 @@ class TMDBClient:
             return random.choice(results[:10]), mood
         return None, mood
 
-    def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=20):
-        """Find movies both users will enjoy — returns up to count results."""
+    def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=24):
+        """
+        Smart 'Find For Us' algorithm:
+        1. Build a weighted genre profile from BOTH users (higher rated = more weight)
+        2. Fetch from top genres one-by-one using OR logic (not AND — AND returns nothing)
+        3. Score every result against BOTH users' taste profiles
+        4. Filter out anything already watched/rated by either user
+        5. Sort by combined taste score, return top N
+        """
         from collections import Counter
-        genre_counts = Counter()
-        for r in user1_ratings + user2_ratings:
-            for gid in (r.get('genre_ids') or '').split(','):
-                gid = gid.strip()
-                if gid and gid.isdigit():
-                    genre_counts[int(gid)] += r.get('score', 3)
-        top = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:3]
-        genre_ids = [g[0] for g in top] if top else [35, 28, 18]
-        watched = {r['tmdb_id'] for r in user1_ratings} | {r['tmdb_id'] for r in user2_ratings}
-        all_results = []
-        seen = set()
-        # Fetch multiple pages for more variety
-        for page in range(1, 5):
-            page_results = self.discover(media_type, genre_ids=genre_ids,
-                                         sort_by='vote_average.desc', page=page)
-            for r in page_results:
-                if r['tmdb_id'] not in watched and r['tmdb_id'] not in seen:
-                    all_results.append(r)
-                    seen.add(r['tmdb_id'])
-            if len(all_results) >= count:
-                break
-        # Also try with OR logic for more results if needed
-        if len(all_results) < count // 2:
-            extra = self.discover(media_type, genre_ids=genre_ids[:1],
-                                  sort_by='popularity.desc', page=1, genre_logic='OR')
-            for r in extra:
-                if r['tmdb_id'] not in watched and r['tmdb_id'] not in seen:
-                    all_results.append(r)
-                    seen.add(r['tmdb_id'])
-        all_results.sort(key=lambda x: x.get('vote_average', 0), reverse=True)
-        return all_results[:count]
+
+        # ── STEP 1: Build weighted genre profiles ─────────────────────────────
+        def build_profile(ratings):
+            """Returns {genre_id: weight} based on ratings. High score = liked."""
+            profile = Counter()
+            for r in ratings:
+                score = r.get('score', 3)
+                if score < 3:
+                    continue  # skip disliked content
+                weight = (score - 2) * 0.5  # score 3→0.5, 4→1.0, 5→1.5
+                for gid in (r.get('genre_ids') or '').split(','):
+                    gid = gid.strip()
+                    if gid and gid.isdigit():
+                        profile[int(gid)] += weight
+            return profile
+
+        p1 = build_profile(user1_ratings)
+        p2 = build_profile(user2_ratings)
+
+        # Combined profile = genres BOTH users like (intersection weighted)
+        all_genres = set(p1.keys()) | set(p2.keys())
+        combined = {}
+        for g in all_genres:
+            w1 = p1.get(g, 0)
+            w2 = p2.get(g, 0)
+            if w1 > 0 and w2 > 0:
+                # Both like it — strong signal, use harmonic mean
+                combined[g] = 2 * w1 * w2 / (w1 + w2)
+            elif w1 > 0 or w2 > 0:
+                # Only one likes it — weaker signal
+                combined[g] = (w1 + w2) * 0.3
+
+        # Fallback: no data yet — use popular genres
+        if not combined:
+            combined = {18: 1.0, 35: 1.0, 28: 0.8, 10749: 0.8, 878: 0.7, 9648: 0.7}
+
+        top_genres = sorted(combined.items(), key=lambda x: x[1], reverse=True)
+        top_genre_ids = [g[0] for g in top_genres[:6]]
+
+        # ── STEP 2: Fetch candidates ───────────────────────────────────────────
+        already_seen = {r['tmdb_id'] for r in user1_ratings + user2_ratings}
+        candidates = []
+        seen_ids = set()
+
+        # Strategy A: fetch each top genre separately (OR per-genre = more results)
+        for genre_id in top_genre_ids[:4]:
+            for page in range(1, 4):
+                results = self.discover(
+                    media_type,
+                    genre_ids=[genre_id],
+                    sort_by='vote_average.desc',
+                    page=page,
+                    genre_logic='OR'
+                )
+                for r in results:
+                    if r['vote_average'] < 6.0:  # skip low quality
+                        continue
+                    if r['tmdb_id'] not in already_seen and r['tmdb_id'] not in seen_ids:
+                        candidates.append(r)
+                        seen_ids.add(r['tmdb_id'])
+            if len(candidates) >= count * 4:
+                break  # enough to work with
+
+        # Strategy B: if still thin, also fetch by popularity
+        if len(candidates) < count * 2:
+            for genre_id in top_genre_ids[:2]:
+                extra = self.discover(
+                    media_type,
+                    genre_ids=[genre_id],
+                    sort_by='popularity.desc',
+                    page=1,
+                    genre_logic='OR'
+                )
+                for r in extra:
+                    if r['tmdb_id'] not in already_seen and r['tmdb_id'] not in seen_ids:
+                        candidates.append(r)
+                        seen_ids.add(r['tmdb_id'])
+
+        # Strategy C: absolute fallback — trending
+        if len(candidates) < count:
+            trending = self.trending(media_type, 'week')
+            for r in trending:
+                if r['tmdb_id'] not in already_seen and r['tmdb_id'] not in seen_ids:
+                    candidates.append(r)
+                    seen_ids.add(r['tmdb_id'])
+
+        # ── STEP 3: Score each candidate against both taste profiles ──────────
+        def taste_score(item, profile):
+            """How well does this item match a user's taste profile?"""
+            if not profile:
+                return 0.5
+            item_genres = set()
+            for gid in (item.get('genre_ids') or []):
+                item_genres.add(int(gid) if isinstance(gid, int) else int(gid))
+            if not item_genres:
+                return 0.3
+            total_weight = sum(profile.values()) or 1
+            match_weight = sum(profile.get(g, 0) for g in item_genres)
+            return min(match_weight / total_weight, 1.0)
+
+        for item in candidates:
+            # Convert genre_ids list for scoring
+            raw_gids = item.get('genre_ids', [])
+            if isinstance(raw_gids, list):
+                item['_genre_set'] = raw_gids
+            else:
+                item['_genre_set'] = [int(g) for g in str(raw_gids).split(',') if str(g).strip().isdigit()]
+
+            s1 = taste_score({'genre_ids': item['_genre_set']}, p1)
+            s2 = taste_score({'genre_ids': item['_genre_set']}, p2)
+
+            quality = min((item.get('vote_average', 5) - 5) / 5, 1.0)  # 0-1 from rating
+            quality = max(quality, 0)
+
+            # Final score: both users must like it (harmonic mean of taste scores)
+            # Plus quality bonus
+            if s1 > 0 and s2 > 0:
+                taste = 2 * s1 * s2 / (s1 + s2)
+            else:
+                taste = (s1 + s2) * 0.4
+
+            item['_for_us_score'] = taste * 0.65 + quality * 0.35
+
+        # ── STEP 4: Sort and return ────────────────────────────────────────────
+        candidates.sort(key=lambda x: x.get('_for_us_score', 0), reverse=True)
+
+        # Clean internal keys before returning
+        for item in candidates:
+            item.pop('_genre_set', None)
+            item.pop('_for_us_score', None)
+
+        return candidates[:count]
 
     def compatibility(self, u1_ratings, u2_ratings, u1_watched, u2_watched,
                       u1_genres=None, u2_genres=None):
