@@ -496,6 +496,53 @@ def analytics():
     })
 
 
+
+# ── PROFILE ───────────────────────────────────────────────────────────────────
+@api_bp.route('/profile/update', methods=['POST'])
+@login_required
+def update_profile():
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip()
+    avatar_color = data.get('avatar_color', current_user.avatar_color)
+
+    if not username or not email:
+        return jsonify({'error': 'Username and email required'}), 400
+
+    # Check username taken by someone else
+    existing = User.query.filter_by(username=username).first()
+    if existing and existing.id != current_user.id:
+        return jsonify({'error': 'Username already taken'}), 400
+
+    existing_email = User.query.filter_by(email=email).first()
+    if existing_email and existing_email.id != current_user.id:
+        return jsonify({'error': 'Email already in use'}), 400
+
+    current_user.username = username
+    current_user.email = email
+    current_user.avatar_color = avatar_color
+    db.session.commit()
+    return jsonify({'success': True, 'user': current_user.to_dict()})
+
+
+@api_bp.route('/profile/change-password', methods=['POST'])
+@login_required
+def change_password():
+    from extensions import bcrypt
+    data = request.get_json()
+    current_pw = data.get('current_password', '')
+    new_pw = data.get('new_password', '')
+
+    if not bcrypt.check_password_hash(current_user.password_hash, current_pw):
+        return jsonify({'error': 'Current password is incorrect'}), 400
+    if len(new_pw) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
+    current_user.password_hash = bcrypt.generate_password_hash(new_pw).decode('utf-8')
+    db.session.commit()
+    return jsonify({'success': True})
+
+
 @api_bp.route('/me')
 @login_required
 def me():

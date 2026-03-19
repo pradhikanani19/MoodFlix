@@ -87,6 +87,12 @@ def movie_detail(tmdb_id):
     return render_template('detail.html', item=movie, media_type='movie', in_watchlist=in_wl, user_rating=ur)
 
 
+@main_bp.route('/profile')
+@login_required
+def profile():
+    return render_template('profile.html')
+
+
 @main_bp.route('/tv/<int:tmdb_id>')
 @login_required
 def tv_detail(tmdb_id):

@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}My Profile – MoodFlix{% endblock %}
+{% block content %}
+<div class="page container" style="max-width:680px">
+  <div class="page-hdr">
+    <h1>My Profile</h1>
+    <p>Manage your account and personalise your experience</p>
+  </div>
+
+  <!-- AVATAR + NAME CARD -->
+  <div style="background:var(--sur);border-radius:var(--r);border:1.5px solid var(--bdr2);box-shadow:var(--sh-card);overflow:hidden;margin-bottom:20px">
+    <!-- Cover strip -->
+    <div style="height:90px;background:var(--grad);position:relative"></div>
+    <!-- Avatar -->
+    <div style="padding:0 28px 28px;position:relative">
+      <div id="avatarCircle"
+        style="width:84px;height:84px;border-radius:50%;background:{{ current_user.avatar_color }};display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;font-weight:800;font-size:32px;color:#fff;border:4px solid var(--sur);margin-top:-42px;cursor:pointer;position:relative;box-shadow:var(--sh-md);transition:all 0.2s"
+        onclick="document.getElementById('pfpInput').click()"
+        title="Click to change profile picture">
+        <span id="avatarInitial">{{ current_user.username[0].upper() }}</span>
+        <img id="avatarImg" src="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0">
+        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s" id="avatarOverlay">
+          <span style="font-size:20px">📷</span>
+        </div>
+      </div>
+      <input type="file" id="pfpInput" accept="image/*" style="display:none" onchange="handlePfp(this)">
+      <p style="font-size:11px;color:var(--t3);margin-top:6px;font-weight:500">Click avatar to change photo</p>
+
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-family:'Poppins',sans-serif;display:block;margin-bottom:6px">Username</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="usernameInput" value="{{ current_user.username }}"
+              style="flex:1;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 14px;font-size:14px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+              onfocus="this.style.borderColor='var(--accent-bdr)'"
+              onblur="this.style.borderColor='var(--bdr2)'">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-family:'Poppins',sans-serif;display:block;margin-bottom:6px">Email</label>
+          <input type="email" id="emailInput" value="{{ current_user.email }}"
+            style="width:100%;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 14px;font-size:14px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+            onfocus="this.style.borderColor='var(--accent-bdr)'"
+            onblur="this.style.borderColor='var(--bdr2)'">
+        </div>
+      </div>
+
+      <!-- Avatar colour picker -->
+      <div style="margin-top:20px">
+        <label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-family:'Poppins',sans-serif;display:block;margin-bottom:10px">Avatar Colour</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap" id="colorPicker">
+          {% set colors = ['#FFB7A5','#F9A8D4','#93C5FD','#6EE7B7','#FCD34D','#A78BFA','#FB923C','#34D399','#60A5FA','#F472B6','#E8957E','#7C3AED'] %}
+          {% for c in colors %}
+          <div onclick="pickColor('{{ c }}')"
+            style="width:32px;height:32px;border-radius:50%;background:{{ c }};cursor:pointer;transition:all 0.18s;border:3px solid {% if c == current_user.avatar_color %}var(--t){% else %}transparent{% endif %}"
+            id="col-{{ c|replace('#','') }}"
+            title="{{ c }}">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div style="margin-top:22px;display:flex;gap:10px">
+        <button class="btn-primary" onclick="saveProfile()">Save Changes</button>
+        <div id="saveMsg" style="display:none;align-self:center;font-size:13px;font-weight:500;color:var(--peach-deep)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANGE PASSWORD -->
+  <div style="background:var(--sur);border-radius:var(--r);border:1.5px solid var(--bdr2);box-shadow:var(--sh-card);padding:24px;margin-bottom:20px">
+    <h3 style="margin-bottom:18px;font-size:16px">🔒 Change Password</h3>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-family:'Poppins',sans-serif;display:block;margin-bottom:6px">Current Password</label>
+        <input type="password" id="currentPw" placeholder="Enter current password"
+          style="width:100%;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 14px;font-size:14px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+          onfocus="this.style.borderColor='var(--accent-bdr)'"
+          onblur="this.style.borderColor='var(--bdr2)'">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-family:'Poppins',sans-serif;display:block;margin-bottom:6px">New Password</label>
+        <input type="password" id="newPw" placeholder="Min 6 characters"
+          style="width:100%;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 14px;font-size:14px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+          onfocus="this.style.borderColor='var(--accent-bdr)'"
+          onblur="this.style.borderColor='var(--bdr2)'">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;font-family:'Poppins',sans-serif;display:block;margin-bottom:6px">Confirm New Password</label>
+        <input type="password" id="confirmPw" placeholder="Repeat new password"
+          style="width:100%;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 14px;font-size:14px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+          onfocus="this.style.borderColor='var(--accent-bdr)'"
+          onblur="this.style.borderColor='var(--bdr2)'">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn-primary" onclick="changePassword()">Update Password</button>
+        <div id="pwMsg" style="display:none;font-size:13px;font-weight:500"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS SUMMARY -->
+  <div style="background:var(--sur);border-radius:var(--r);border:1.5px solid var(--bdr2);box-shadow:var(--sh-card);padding:24px;margin-bottom:20px">
+    <h3 style="margin-bottom:18px;font-size:16px">📊 Your Stats</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px" id="statsGrid">
+      <div class="spin"></div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT -->
+  <div style="background:var(--sur);border-radius:var(--r);border:1.5px solid var(--bdr2);box-shadow:var(--sh-card);padding:24px">
+    <h3 style="margin-bottom:6px;font-size:16px">⚙️ Account</h3>
+    <p style="font-size:13px;margin-bottom:16px">Member since {{ current_user.created_at.strftime('%B %d, %Y') }}</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="{{ url_for('auth.logout') }}" class="btn-ghost" style="font-size:13px;padding:9px 20px">Log Out</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedColor = '{{ current_user.avatar_color }}';
+
+// Hover effect on avatar
+const avatarCircle = document.getElementById('avatarCircle');
+const overlay = document.getElementById('avatarOverlay');
+avatarCircle.addEventListener('mouseenter', () => overlay.style.opacity = '1');
+avatarCircle.addEventListener('mouseleave', () => overlay.style.opacity = '0');
+
+function pickColor(color) {
+  selectedColor = color;
+  document.getElementById('avatarCircle').style.background = color;
+  // Update border on all swatches
+  document.querySelectorAll('#colorPicker div').forEach(el => {
+    el.style.border = '3px solid transparent';
+    el.style.transform = 'scale(1)';
+  });
+  const id = 'col-' + color.replace('#','');
+  const el = document.getElementById(id);
+  if (el) { el.style.border = '3px solid var(--t)'; el.style.transform = 'scale(1.15)'; }
+}
+
+function handlePfp(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showToast('❌ Image too large (max 2MB)'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById('avatarImg');
+    const initial = document.getElementById('avatarInitial');
+    img.src = e.target.result;
+    img.style.display = 'block';
+    initial.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveProfile() {
+  const username = document.getElementById('usernameInput').value.trim();
+  const email = document.getElementById('emailInput').value.trim();
+  const msg = document.getElementById('saveMsg');
+
+  if (!username || !email) {
+    msg.style.display = 'block';
+    msg.style.color = '#E87060';
+    msg.textContent = 'Username and email are required';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/profile/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, avatar_color: selectedColor })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.style.display = 'block';
+      msg.style.color = 'var(--peach-deep)';
+      msg.textContent = '✓ Profile updated!';
+      // Update navbar avatar live
+      const navAvatar = document.querySelector('.nav-avatar');
+      if (navAvatar) {
+        navAvatar.textContent = username[0].toUpperCase();
+        navAvatar.style.background = selectedColor;
+      }
+      setTimeout(() => msg.style.display = 'none', 3000);
+    } else {
+      msg.style.display = 'block';
+      msg.style.color = '#E87060';
+      msg.textContent = data.error || 'Error saving';
+    }
+  } catch(e) {
+    msg.style.display = 'block';
+    msg.style.color = '#E87060';
+    msg.textContent = 'Something went wrong';
+  }
+}
+
+async function changePassword() {
+  const current = document.getElementById('currentPw').value;
+  const newpw = document.getElementById('newPw').value;
+  const confirm = document.getElementById('confirmPw').value;
+  const msg = document.getElementById('pwMsg');
+
+  if (!current || !newpw || !confirm) {
+    msg.style.display = 'block'; msg.style.color = '#E87060';
+    msg.textContent = 'All fields required'; return;
+  }
+  if (newpw !== confirm) {
+    msg.style.display = 'block'; msg.style.color = '#E87060';
+    msg.textContent = 'Passwords do not match'; return;
+  }
+  if (newpw.length < 6) {
+    msg.style.display = 'block'; msg.style.color = '#E87060';
+    msg.textContent = 'Min 6 characters'; return;
+  }
+
+  try {
+    const res = await fetch('/api/profile/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: current, new_password: newpw })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.style.display = 'block'; msg.style.color = 'var(--peach-deep)';
+      msg.textContent = '✓ Password updated!';
+      document.getElementById('currentPw').value = '';
+      document.getElementById('newPw').value = '';
+      document.getElementById('confirmPw').value = '';
+      setTimeout(() => msg.style.display = 'none', 3000);
+    } else {
+      msg.style.display = 'block'; msg.style.color = '#E87060';
+      msg.textContent = data.error || 'Error updating password';
+    }
+  } catch(e) {
+    msg.style.display = 'block'; msg.style.color = '#E87060';
+    msg.textContent = 'Something went wrong';
+  }
+}
+
+// Load stats
+(async () => {
+  try {
+    const data = await (await fetch('/api/analytics')).json();
+    const grid = document.getElementById('statsGrid');
+    const stats = [
+      { icon: '🎬', value: data.total_watched, label: 'Watched' },
+      { icon: '⭐', value: data.total_rated, label: 'Rated' },
+      { icon: '📋', value: data.total_watched + (data.total_rated || 0), label: 'Total Activity' },
+      { icon: '🎭', value: data.top_genres[0]?.[0] || '—', label: 'Top Genre' },
+    ];
+    grid.innerHTML = stats.map(s => `
+      <div style="background:var(--sur2);border-radius:var(--r);padding:18px 14px;text-align:center;border:1.5px solid var(--bdr2)">
+        <div style="font-size:24px;margin-bottom:8px">${s.icon}</div>
+        <div style="font-size:22px;font-weight:800;font-family:'Poppins',sans-serif;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;margin-bottom:4px">${s.value}</div>
+        <div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:1px">${s.label}</div>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('statsGrid').innerHTML = '<p style="color:var(--t3);font-size:13px">Rate movies to see stats</p>';
+  }
+})();
+</script>
+{% endblock %}
