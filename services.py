@@ -326,14 +326,15 @@ class TMDBClient:
         import math as _math
         scored = []
         for item in pool.values():
-            raw = item.get('genre_ids', [])
+            raw = item.get('genre_ids') or []
+
+        try:
             if isinstance(raw, list):
-                gids = set(int(g) for g in raw if str(g).strip().isdigit())
+                 gids = set(int(g) for g in raw if str(g).strip().isdigit())
             else:
                 gids = set(int(g.strip()) for g in str(raw).split(',') if g.strip().isdigit())
-
-            if not gids:
-                continue
+        except:
+            gids = set()
 
             # How strongly do item genres align with SHARED taste?
             # Uses actual shared weights — Romance scores 3x if both love it
