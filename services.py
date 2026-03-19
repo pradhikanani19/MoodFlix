@@ -9,8 +9,7 @@ TMDB_GENRE_NAMES = {
     53: "Thriller", 10752: "War", 37: "Western"
 }
 
-# Each mood maps to a SINGLE primary genre for strict TMDB AND filtering
-# with_genres uses comma = AND logic on TMDB
+# TV uses same genre IDs as movies for most genres
 MOOD_GENRE_MAP = {
     'chill':         {'genres': [18],        'keywords': 'calm relaxing slice of life peaceful'},
     'emotional':     {'genres': [18],        'keywords': 'emotional touching heartfelt drama tears'},
@@ -93,30 +92,26 @@ class TMDBClient:
 
     def discover(self, media_type='movie', genre_ids=None, language=None,
                  year_from=None, year_to=None, sort_by='popularity.desc', page=1,
-                 genre_logic='AND'):
+                 genre_logic='AND', min_votes=50):
         if media_type == 'tv' and 'release_date' in sort_by:
             sort_by = 'popularity.desc'
-        params = {'sort_by': sort_by, 'page': page, 'vote_count.gte': 5}
+        params = {
+            'sort_by': sort_by,
+            'page': page,
+            'vote_count.gte': min_votes,
+            'vote_average.gte': 5.0,  # always enforce minimum quality
+        }
         if genre_ids:
-            unique = list(dict.fromkeys(genre_ids))  # preserve order, dedupe
-            if genre_logic == 'AND':
-                # TMDB: comma-separated = AND (must have ALL genres)
-                params['with_genres'] = ','.join(map(str, unique))
-            else:
-                # TMDB: pipe-separated = OR (any genre)
-                params['with_genres'] = '|'.join(map(str, unique))
+            unique = list(dict.fromkeys(genre_ids))
+            params['with_genres'] = ','.join(map(str, unique)) if genre_logic == 'AND' else '|'.join(map(str, unique))
         if language:
             params['with_original_language'] = language
         if year_from:
-            if media_type == 'tv':
-                params['first_air_date.gte'] = f'{year_from}-01-01'
-            else:
-                params['primary_release_date.gte'] = f'{year_from}-01-01'
+            key = 'first_air_date.gte' if media_type == 'tv' else 'primary_release_date.gte'
+            params[key] = f'{year_from}-01-01'
         if year_to:
-            if media_type == 'tv':
-                params['first_air_date.lte'] = f'{year_to}-12-31'
-            else:
-                params['primary_release_date.lte'] = f'{year_to}-12-31'
+            key = 'first_air_date.lte' if media_type == 'tv' else 'primary_release_date.lte'
+            params[key] = f'{year_to}-12-31'
         data = self.get(f'/discover/{media_type}', params)
         if not data:
             return []
@@ -177,18 +172,15 @@ class TMDBClient:
         if not mood_ids:
             return self.trending(media_type, 'week')
 
-        # Use only the PRIMARY genre from each mood for strict AND filtering
-        # This ensures Romantic only shows Romance, not Crime+Drama+Romance
         primary_genres = []
         for mood in mood_ids:
             genres = MOOD_GENRE_MAP.get(mood, {}).get('genres', [])
             if genres:
                 primary_genres.append(genres[0])
-        genre_ids = list(dict.fromkeys(primary_genres))  # dedupe, preserve order
+        genre_ids = list(dict.fromkeys(primary_genres))
 
         lang = INDUSTRY_LANGUAGE_MAP.get(industry.lower())
 
-        # For TV + language: genres are too restrictive, prioritise language
         if media_type == 'tv' and lang:
             results = self.discover(media_type, genre_ids=genre_ids[:1] if genre_ids else None,
                                     language=lang, page=page, genre_logic='AND')
@@ -197,21 +189,18 @@ class TMDBClient:
         else:
             results = self.discover(media_type, genre_ids=genre_ids or None,
                                     language=lang, page=page, genre_logic='AND')
-            # Fallback: drop language but keep genre
             if not results and lang:
-                results = self.discover(media_type, genre_ids=genre_ids or None, page=page,
-                                        genre_logic='AND')
-        # Last resort
+                results = self.discover(media_type, genre_ids=genre_ids or None, page=page, genre_logic='AND')
+
         if not results:
             results = self.trending(media_type, 'week')
 
-        # Score AND filter: keep only items that actually contain AT LEAST ONE selected genre
-        filtered = []
         genre_set = set(genre_ids) if genre_ids else set()
+        filtered = []
         for item in results:
             item_genres = set(item['genre_ids'])
             if genre_set and not item_genres.intersection(genre_set):
-                continue  # skip items with zero genre overlap
+                continue
             overlap = len(item_genres & genre_set) if genre_set else 1
             mood_score = overlap / max(len(genre_set), 1) if genre_set else 0.5
             pop_score = min(item.get('vote_average', 0) / 10, 1.0)
@@ -230,189 +219,206 @@ class TMDBClient:
             return random.choice(results[:10]), mood
         return None, mood
 
-    def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=50):
-        """
-        Find For Us — accurate + generous recommendations.
-
-        Strategy:
-        - Build separate genre+language taste profiles for each user
-        - Identify SHARED preferences (genres both enjoy, weighted by rating)
-        - Fetch candidates from TMDB across many angles: shared genres, shared
-          languages, top-rated in taste overlap, popular in taste overlap
-        - Score every candidate: how much does User1 like it? User2? Combined?
-        - Hard-filter out anything already in either user's watchlist/ratings
-        - Return top N sorted by combined taste fit
-        """
+    # ── FOR US — Smart joint recommendation engine ────────────────────────────
+    def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=50, year_from=None, year_to=None):
         from collections import Counter
 
-        # ── Build taste profiles ──────────────────────────────────────────────
-        def extract_genres(r):
+        # ── 1. Build weighted taste profiles ─────────────────────────────────
+        def parse_genres(r):
             raw = r.get('genre_ids') or ''
             if isinstance(raw, list):
-                return [int(g) for g in raw if str(g).isdigit()]
+                return [int(g) for g in raw if str(g).strip().isdigit()]
             return [int(g.strip()) for g in str(raw).split(',') if g.strip().isdigit()]
 
         def build_profile(ratings):
             genres = Counter()
             langs  = Counter()
+            score_map = {5: 3.0, 4: 2.0, 3: 1.0, 2: -1.0, 1: -2.0}
             for r in ratings:
-                score = r.get('score', 3)
-                # Weight: 5★=3, 4★=2, 3★=1, 1-2★ = negative
-                w = {5: 3.0, 4: 2.0, 3: 1.0, 2: -0.5, 1: -1.0}.get(score, 1.0)
-                for g in extract_genres(r):
+                w = score_map.get(int(r.get('score', 3)), 1.0)
+                for g in parse_genres(r):
                     genres[g] += w
-                lang = r.get('original_language', '')
+                lang = (r.get('original_language') or '').strip()
                 if lang:
                     langs[lang] += max(w, 0)
-            # Remove negatively weighted genres
+            # Keep only positive-weighted genres
             genres = Counter({g: v for g, v in genres.items() if v > 0})
             return genres, langs
 
-        p1_genres, p1_langs = build_profile(user1_ratings)
-        p2_genres, p2_langs = build_profile(user2_ratings)
+        p1g, p1l = build_profile(user1_ratings)
+        p2g, p2l = build_profile(user2_ratings)
 
-        # Shared genres: only genres BOTH users have positive weight for
-        all_g = set(p1_genres.keys()) | set(p2_genres.keys())
-        shared_genres = {}
-        for g in all_g:
-            w1 = p1_genres.get(g, 0)
-            w2 = p2_genres.get(g, 0)
+        # ── 2. Compute SHARED genre + language weights ────────────────────────
+        all_genres = set(p1g) | set(p2g)
+        shared = {}
+        for g in all_genres:
+            w1, w2 = p1g.get(g, 0), p2g.get(g, 0)
             if w1 > 0 and w2 > 0:
-                # Harmonic mean — penalises when one user barely likes it
-                shared_genres[g] = 2 * w1 * w2 / (w1 + w2)
+                shared[g] = 2 * w1 * w2 / (w1 + w2)   # harmonic mean = both must like it
             elif w1 > 0 or w2 > 0:
-                shared_genres[g] = (w1 + w2) * 0.25  # weak signal
+                shared[g] = (w1 + w2) * 0.2             # one likes, one neutral = weak
 
-        # Fallback defaults if no data
-        if not shared_genres:
-            shared_genres = {18: 2.0, 35: 2.0, 28: 1.5, 10749: 1.5,
-                             878: 1.2, 9648: 1.2, 53: 1.0, 12: 1.0}
+        # Fallback when no taste data at all
+        if not shared:
+            shared = {28: 2.0, 35: 2.0, 18: 1.8, 10749: 1.5,
+                      878: 1.2, 53: 1.2, 9648: 1.0, 12: 1.0}
 
-        top_shared = sorted(shared_genres.items(), key=lambda x: x[1], reverse=True)
-        top_genre_ids = [g[0] for g in top_shared[:8]]  # top 8 shared genres
+        ranked_genres = sorted(shared.items(), key=lambda x: x[1], reverse=True)
+        top_gids = [g for g, _ in ranked_genres[:10]]
 
-        # Shared languages
-        all_l = set(p1_langs.keys()) | set(p2_langs.keys())
-        shared_langs = {l: min(p1_langs.get(l,0), p2_langs.get(l,0)) for l in all_l}
-        top_langs = [l for l, _ in sorted(shared_langs.items(), key=lambda x: x[1], reverse=True)[:3]]
+        # Shared languages (both must watch that language)
+        all_langs = set(p1l) | set(p2l)
+        shared_langs = {}
+        for l in all_langs:
+            if p1l.get(l, 0) > 0 and p2l.get(l, 0) > 0:
+                shared_langs[l] = min(p1l[l], p2l[l])
+        top_langs = [l for l, _ in sorted(shared_langs.items(), key=lambda x: x[1], reverse=True)[:4]]
 
-        # Already seen by either user
+        # Already seen/rated by either user — exclude these
         exclude = {r['tmdb_id'] for r in user1_ratings + user2_ratings}
 
-        # ── Fetch candidates from many angles ─────────────────────────────────
-        candidates = {}  # tmdb_id → item
+        # ── 3. Collect candidates from MANY angles ────────────────────────────
+        pool = {}  # tmdb_id → item
 
-        def collect(results):
-            for r in results:
-                if r['tmdb_id'] not in exclude and r['tmdb_id'] not in candidates:
-                    if r.get('vote_average', 0) >= 5.5:  # min quality bar
-                        candidates[r['tmdb_id']] = r
+        def add(items):
+            for item in items:
+                tid = item.get('tmdb_id')
+                if tid and tid not in exclude and tid not in pool:
+                    # Minimum quality gates
+                    if item.get('vote_average', 0) < 5.5:
+                        continue
+                    if item.get('vote_count', 0) < 20:
+                        continue
+                    pool[tid] = item
 
-        # Angle 1: top 5 shared genres, sorted by rating, 5 pages each
-        for gid in top_genre_ids[:5]:
-            for pg in range(1, 6):
-                collect(self.discover(media_type, genre_ids=[gid],
-                                      sort_by='vote_average.desc', page=pg, genre_logic='OR'))
-                if len(candidates) >= count * 6:
-                    break
+        # A: Each top genre separately, popularity sort (most reliable results)
+        for gid in top_gids[:6]:
+            for pg in range(1, 5):
+                add(self.discover(media_type, genre_ids=[gid],
+                                  sort_by='popularity.desc', page=pg,
+                                  genre_logic='OR', min_votes=100,
+                                  year_from=year_from, year_to=year_to))
 
-        # Angle 2: top 5 shared genres sorted by popularity, 3 pages each
-        for gid in top_genre_ids[:5]:
+        # B: Each top genre, high-rating sort with enough vote threshold
+        for gid in top_gids[:6]:
             for pg in range(1, 4):
-                collect(self.discover(media_type, genre_ids=[gid],
-                                      sort_by='popularity.desc', page=pg, genre_logic='OR'))
+                add(self.discover(media_type, genre_ids=[gid],
+                                  sort_by='vote_average.desc', page=pg,
+                                  genre_logic='OR', min_votes=500,
+                                  year_from=year_from, year_to=year_to))  # 500 votes minimum for rating sort
 
-        # Angle 3: shared languages + top genre combo
-        for lang in top_langs[:2]:
-            for gid in top_genre_ids[:3]:
-                for pg in range(1, 3):
-                    collect(self.discover(media_type, genre_ids=[gid],
-                                          language=lang, sort_by='popularity.desc',
-                                          page=pg, genre_logic='OR'))
+        # C: Genre pairs (AND) — very precise, e.g. RomCom, ActionThriller
+        for i in range(min(4, len(top_gids))):
+            for j in range(i + 1, min(6, len(top_gids))):
+                add(self.discover(media_type,
+                                  genre_ids=[top_gids[i], top_gids[j]],
+                                  sort_by='popularity.desc', page=1,
+                                  genre_logic='AND', min_votes=100))
+                add(self.discover(media_type,
+                                  genre_ids=[top_gids[i], top_gids[j]],
+                                  sort_by='popularity.desc', page=2,
+                                  genre_logic='AND', min_votes=100))
 
-        # Angle 4: pairs of top genres (genre1 AND genre2 = precise)
-        for i in range(min(3, len(top_genre_ids))):
-            for j in range(i+1, min(5, len(top_genre_ids))):
-                for pg in range(1, 3):
-                    collect(self.discover(media_type,
-                                          genre_ids=[top_genre_ids[i], top_genre_ids[j]],
-                                          sort_by='vote_average.desc', page=pg,
-                                          genre_logic='AND'))
+        # D: Shared language + top genres
+        for lang in top_langs[:3]:
+            for gid in top_gids[:4]:
+                add(self.discover(media_type, genre_ids=[gid], language=lang,
+                                  sort_by='popularity.desc', page=1,
+                                  genre_logic='OR', min_votes=50))
+                add(self.discover(media_type, genre_ids=[gid], language=lang,
+                                  sort_by='popularity.desc', page=2,
+                                  genre_logic='OR', min_votes=50))
 
-        # Angle 5: pure language fetch (taste through language preference)
+        # E: Pure language fetch (if both watch same language)
         for lang in top_langs[:3]:
             for pg in range(1, 4):
-                collect(self.discover(media_type, language=lang,
-                                      sort_by='popularity.desc', page=pg))
+                add(self.discover(media_type, language=lang,
+                                  sort_by='popularity.desc', page=pg, min_votes=50))
 
-        # Fallback: trending if still not enough
-        if len(candidates) < count:
-            collect(self.trending(media_type, 'week'))
-            collect(self.trending(media_type, 'day'))
+        # F: Trending + day — always fresh
+        add(self.trending(media_type, 'week'))
+        add(self.trending(media_type, 'day'))
 
-        # ── Score every candidate ─────────────────────────────────────────────
-        def score_for_user(item_genres, profile_genres):
-            """0-1: how well do this item's genres match a user's taste?"""
-            if not profile_genres or not item_genres:
-                return 0.4
-            total = sum(profile_genres.values()) or 1
-            match = sum(profile_genres.get(g, 0) for g in item_genres)
-            return min(match / total, 1.0)
+        # G: Absolute fallback if pool is still thin
+        if len(pool) < count:
+            for gid in [28, 35, 18, 53, 10749, 878]:
+                add(self.discover(media_type, genre_ids=[gid],
+                                  sort_by='popularity.desc', page=1,
+                                  genre_logic='OR', min_votes=200))
+
+        # ── 4. Score every candidate ──────────────────────────────────────────
+        def user_score(item_gids, profile):
+            """0-1: how well do item genres match a user's weighted profile?"""
+            if not profile:
+                return 0.5
+            total = sum(profile.values()) or 1
+            match = sum(profile.get(g, 0) for g in item_gids)
+            return min(max(match / total, 0), 1.0)
 
         scored = []
-        for item in candidates.values():
-            gids = item.get('genre_ids', [])
-            if isinstance(gids, list):
-                item_genres = [int(g) for g in gids if str(g).isdigit()]
+        for item in pool.values():
+            raw = item.get('genre_ids', [])
+            if isinstance(raw, list):
+                gids = [int(g) for g in raw if str(g).strip().isdigit()]
             else:
-                item_genres = [int(g.strip()) for g in str(gids).split(',') if g.strip().isdigit()]
+                gids = [int(g.strip()) for g in str(raw).split(',') if g.strip().isdigit()]
 
-            s1 = score_for_user(item_genres, p1_genres)
-            s2 = score_for_user(item_genres, p2_genres)
+            s1 = user_score(gids, p1g)
+            s2 = user_score(gids, p2g)
 
-            # Language bonus: if item language is in shared preference
-            lang = item.get('original_language', '')
-            lang_bonus = 0.08 if lang in top_langs else 0.0
-
-            # Quality score: normalise vote_average to 0-1
-            quality = max(0, (item.get('vote_average', 5) - 5.5) / 4.5)
-
-            # Popularity score (normalised, capped)
-            pop = min(item.get('popularity', 0) / 200, 1.0)
-
-            # Combined score:
-            # - Harmonic mean of both taste scores (both must like it)
-            # - + quality (good movies rank higher)
-            # - + small popularity signal
-            # - + language bonus
+            # Harmonic mean: BOTH users must like it — one bad score kills it
             if s1 > 0 and s2 > 0:
-                taste = 2 * s1 * s2 / (s1 + s2)  # harmonic mean
+                taste = 2 * s1 * s2 / (s1 + s2)
             else:
-                taste = (s1 + s2) * 0.3  # one person doesn't like genre → low score
+                taste = (s1 + s2) * 0.25  # penalty when one user dislikes genre
 
-            final = taste * 0.55 + quality * 0.25 + pop * 0.12 + lang_bonus + 0.08
+            # Quality: vote_average normalised, but only for well-voted movies
+            votes = item.get('vote_count', 0)
+            rating = item.get('vote_average', 5)
+            quality = max(0, (rating - 5.5) / 4.5) if votes >= 100 else 0
 
-            item['_score'] = round(final, 4)
+            # Popularity: log-normalised (prevents mega-blockbusters from dominating)
+            import math
+            pop_raw = item.get('popularity', 1)
+            popularity = min(math.log(max(pop_raw, 1)) / math.log(1000), 1.0)
+
+            # Language bonus
+            lang_bonus = 0.10 if item.get('original_language') in top_langs else 0.0
+
+            # Genre relevance bonus: how many top genres does this item cover?
+            genre_set = set(gids)
+            top_genre_set = set(top_gids[:5])
+            genre_overlap = len(genre_set & top_genre_set) / max(len(top_genre_set), 1)
+
+            # Final formula
+            score = (
+                taste       * 0.45 +   # most important: both must like it
+                quality     * 0.20 +   # good ratings matter
+                popularity  * 0.15 +   # some popularity signal
+                genre_overlap * 0.12 + # genre coverage bonus
+                lang_bonus  +          # language match bonus
+                0.08                   # base score so no item is zero
+            )
+
+            item['_score'] = round(score, 5)
             scored.append(item)
 
-        # Sort by score descending
+        # ── 5. Sort, dedupe, return ───────────────────────────────────────────
         scored.sort(key=lambda x: x['_score'], reverse=True)
 
-        # Clean internal key
+        # Clean internal scoring keys
         for item in scored:
             item.pop('_score', None)
 
         return scored[:count]
 
+    # ── COMPATIBILITY ─────────────────────────────────────────────────────────
     def compatibility(self, u1_ratings, u2_ratings, u1_watched, u2_watched,
                       u1_genres=None, u2_genres=None):
-        """Improved compatibility score 0-100."""
         from collections import Counter
-        # 1. Watch overlap
         w1, w2 = set(u1_watched), set(u2_watched)
         watch_overlap = len(w1 & w2) / max(len(w1 | w2), 1) if (w1 or w2) else 0
 
-        # 2. Rating cosine similarity on commonly rated items
         u1r = {r['tmdb_id']: r['score'] for r in u1_ratings}
         u2r = {r['tmdb_id']: r['score'] for r in u2_ratings}
         common = set(u1r.keys()) & set(u2r.keys())
@@ -421,37 +427,27 @@ class TMDBClient:
             b = np.array([u2r[k] for k in common], dtype=float)
             norm_a, norm_b = np.linalg.norm(a), np.linalg.norm(b)
             cosine = float(np.dot(a, b) / (norm_a * norm_b)) if norm_a and norm_b else 0.5
-            # Rating agreement: penalise large differences
             avg_diff = sum(abs(u1r[k] - u2r[k]) for k in common) / len(common)
             agreement = max(0.0, 1.0 - avg_diff / 4.0)
-            rating_sim = (cosine * 0.6 + agreement * 0.4)
+            rating_sim = cosine * 0.6 + agreement * 0.4
         elif len(common) == 1:
             diff = abs(u1r[list(common)[0]] - u2r[list(common)[0]])
             rating_sim = max(0.3, 1.0 - diff / 4.0)
         else:
             rating_sim = 0.35
 
-        # 3. Genre taste overlap using Jaccard on top genres
         if u1_genres and u2_genres:
-            g1 = Counter(u1_genres)
-            g2 = Counter(u2_genres)
-            all_g = set(g1.keys()) | set(g2.keys())
-            if all_g:
-                overlap = sum(min(g1.get(g, 0), g2.get(g, 0)) for g in all_g)
-                total = sum(max(g1.get(g, 0), g2.get(g, 0)) for g in all_g)
-                genre_sim = overlap / total if total else 0.5
-            else:
-                genre_sim = 0.5
+            g1, g2 = Counter(u1_genres), Counter(u2_genres)
+            all_g = set(g1) | set(g2)
+            overlap = sum(min(g1.get(g, 0), g2.get(g, 0)) for g in all_g)
+            total = sum(max(g1.get(g, 0), g2.get(g, 0)) for g in all_g)
+            genre_sim = overlap / total if total else 0.5
         else:
             genre_sim = 0.5
 
-        # Weighted: rating similarity most important
         score = rating_sim * 0.50 + genre_sim * 0.30 + watch_overlap * 0.20
-
-        # Bonus for meaningful shared watching history
         if len(w1 & w2) >= 3:
             score = min(score + 0.04, 1.0)
         if len(w1 & w2) >= 8:
             score = min(score + 0.04, 1.0)
-
         return min(round(score * 100), 100)

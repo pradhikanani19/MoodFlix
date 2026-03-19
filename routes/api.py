@@ -348,8 +348,10 @@ def for_us(friend_id):
                                'genre_ids': w.genre_ids or '', 'original_language': w.original_language or ''})
     media_type = request.args.get('media_type', 'movie')
     count = int(request.args.get('count', 50))
-    results = tmdb().for_us(my_ratings, f_ratings, media_type, count=count)
-    # Fallback: return trending if no data at all
+    year_from = request.args.get('year_from', type=int)
+    year_to = request.args.get('year_to', type=int)
+    results = tmdb().for_us(my_ratings, f_ratings, media_type, count=count,
+                             year_from=year_from, year_to=year_to)
     if not results:
         results = tmdb().trending(media_type, 'week')[:count]
     return jsonify(results)

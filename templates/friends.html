@@ -8,13 +8,19 @@
 .shared-modal-box{background:var(--sur);border-radius:var(--rl);width:min(660px,100%);max-height:90vh;overflow:hidden;box-shadow:var(--sh-lg);border:1.5px solid var(--bdr2);display:flex;flex-direction:column}
 .shared-modal-head{padding:18px 22px;border-bottom:1.5px solid var(--bdr2);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,var(--sur2),var(--bg2));flex-shrink:0}
 .shared-modal-search{padding:14px 22px;border-bottom:1.5px solid var(--bdr2);background:var(--bg2);flex-shrink:0;position:relative}
-.shared-modal-results{position:absolute;left:22px;right:22px;top:calc(100% - 6px);background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;z-index:10;display:none}
+.shared-modal-results{position:absolute;left:22px;right:22px;top:calc(100% - 4px);background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;z-index:10;display:none;box-shadow:var(--sh-md)}
 .shared-modal-results.open{display:block}
 .shared-modal-body{flex:1;overflow-y:auto;padding:16px 22px}
 .sri-pick{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background 0.15s;border-bottom:1px solid var(--bdr2)}
 .sri-pick:hover{background:var(--sur2)}
 .wl-item-row{display:flex;align-items:center;gap:13px;padding:11px 0;border-bottom:1px solid var(--bdr2)}
 .wl-item-row:last-child{border-bottom:none}
+.forus-filter-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px 22px;border-bottom:1.5px solid var(--bdr2);background:var(--bg2)}
+.forus-toggle{display:flex;background:var(--sur);border-radius:50px;border:1.5px solid var(--bdr2);overflow:hidden;padding:2px;gap:2px}
+.forus-tgbtn{padding:6px 14px;border:none;cursor:pointer;font-weight:500;font-size:12px;background:transparent;color:var(--t2);transition:all 0.18s;font-family:inherit;border-radius:50px}
+.forus-tgbtn.active{background:var(--grad);color:#fff;font-weight:600}
+.yr-input{background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:6px 10px;font-size:12px;color:var(--t);outline:none;font-family:inherit;width:80px;transition:all 0.2s}
+.yr-input:focus{border-color:var(--accent-bdr)}
 </style>
 {% endblock %}
 
@@ -22,10 +28,9 @@
 <div class="page container">
   <div class="page-hdr">
     <h1>Friends <span class="gtxt">& Compatibility</span></h1>
-    <p>See who shares your taste, build shared watchlists, and discover films you'll both love</p>
+    <p>See who shares your taste, build shared watchlists, and find films you'll both love</p>
   </div>
 
-  <!-- PENDING REQUESTS -->
   <div id="pendingBanner" style="display:none;background:linear-gradient(135deg,#FFF0E8,#FFE4D8);border:1.5px solid var(--accent-bdr);border-radius:var(--r);padding:16px 20px;margin-bottom:20px">
     <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:14px;color:var(--peach-deep);margin-bottom:12px">🔔 Pending Friend Requests</div>
     <div id="pendingList"></div>
@@ -33,7 +38,6 @@
 
   <div class="friends-layout">
     <div class="friends-sidebar">
-
       <div class="card-block">
         <h3>Add a Friend</h3>
         <div style="display:flex;gap:9px;align-items:stretch">
@@ -85,15 +89,13 @@
         {% endfor %}
       </div>
       {% endif %}
-
     </div>
 
-    <!-- FRIEND DETAIL PANEL -->
     <div class="friend-panel" id="friendPanel">
       <div class="fp-empty">
         <div style="font-size:48px;margin-bottom:12px">💞</div>
         <h3 style="color:var(--t2);font-size:19px;margin-bottom:8px">Select a friend</h3>
-        <p style="font-size:13px;max-width:240px;line-height:1.7">Click a friend to see compatibility and get movie recommendations for both of you</p>
+        <p style="font-size:13px;max-width:240px;line-height:1.7">Click a friend to see compatibility and get recommendations for both of you</p>
       </div>
     </div>
   </div>
@@ -107,7 +109,7 @@
         <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:var(--t)" id="modalTitle">Shared Watchlist</div>
         <div style="font-size:12px;color:var(--t3);margin-top:2px" id="modalMeta"></div>
       </div>
-      <button onclick="closeModal()" style="width:32px;height:32px;border-radius:50%;background:var(--sur3);border:1.5px solid var(--bdr2);cursor:pointer;font-size:18px;color:var(--t2);display:flex;align-items:center;justify-content:center;line-height:1">×</button>
+      <button onclick="closeModal()" style="width:32px;height:32px;border-radius:50%;background:var(--sur3);border:1.5px solid var(--bdr2);cursor:pointer;font-size:18px;color:var(--t2);display:flex;align-items:center;justify-content:center">×</button>
     </div>
     <div class="shared-modal-search">
       <input type="text" id="modalSearch" placeholder="🔍 Search movies or series to add..." autocomplete="off"
@@ -117,9 +119,7 @@
         oninput="handleModalSearch(this.value)">
       <div class="shared-modal-results" id="modalResults"></div>
     </div>
-    <div class="shared-modal-body" id="modalBody">
-      <div class="spin"></div>
-    </div>
+    <div class="shared-modal-body" id="modalBody"><div class="spin"></div></div>
   </div>
 </div>
 {% endblock %}
@@ -128,6 +128,10 @@
 <script>
 let activeListId = null;
 let modalSearchTimer = null;
+let activeFid = null;
+let forUsMediaType = 'movie';
+let forUsYearFrom = '';
+let forUsYearTo = '';
 
 // Load pending requests
 (async () => {
@@ -138,10 +142,7 @@ let modalSearchTimer = null;
     document.getElementById('pendingList').innerHTML = reqs.map(r => `
       <div style="display:flex;align-items:center;gap:11px;padding:8px 0">
         <div style="width:36px;height:36px;border-radius:50%;background:${r.sender_avatar_color};color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;flex-shrink:0">${r.sender_username[0].toUpperCase()}</div>
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:13px;color:var(--t)">${r.sender_username}</div>
-          <div style="font-size:11px;color:var(--t3)">wants to be friends</div>
-        </div>
+        <div style="flex:1"><div style="font-weight:600;font-size:13px;color:var(--t)">${r.sender_username}</div><div style="font-size:11px;color:var(--t3)">wants to be friends</div></div>
         <button onclick="respond(${r.id},'accept')" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif">Accept</button>
         <button onclick="respond(${r.id},'reject')" style="background:transparent;color:var(--t3);border:1.5px solid var(--bdr2);border-radius:50px;padding:6px 14px;font-size:12px;cursor:pointer">Decline</button>
       </div>`).join('');
@@ -197,71 +198,134 @@ async function addFriend() {
 }
 
 async function selectFriend(fid, fname, fcolor) {
+  activeFid = fid;
   document.querySelectorAll('.friend-row').forEach(r => r.classList.remove('active-fr'));
   const row = document.getElementById('fr-' + fid);
   if (row) row.classList.add('active-fr');
-
   const panel = document.getElementById('friendPanel');
-  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px"><div class="spin"></div></div>';
+  panel.innerHTML = `
+    <div class="forus-filter-bar">
+      <div class="forus-toggle" id="forUsToggle">
+        <button class="forus-tgbtn active" onclick="setForUsMedia(this,'movie')">🎬 Movies</button>
+        <button class="forus-tgbtn" onclick="setForUsMedia(this,'tv')">📺 Series</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:1px">Year</label>
+        <input type="number" class="yr-input" id="yrFrom" placeholder="From" min="1900" max="2025" oninput="scheduleForUs()">
+        <span style="color:var(--t3);font-size:12px">–</span>
+        <input type="number" class="yr-input" id="yrTo" placeholder="To" min="1900" max="2025" oninput="scheduleForUs()">
+      </div>
+      <button onclick="loadForUs()" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:var(--sh)">🔄 Refresh</button>
+    </div>
+    <div class="fp-tabs">
+      <button class="fp-tab active" onclick="fpTab(this,'fp-for-us')">🎯 Find For Us</button>
+      <button class="fp-tab" onclick="fpTab(this,'fp-compat')">📊 Compatibility</button>
+      <button class="fp-tab" onclick="fpTab(this,'fp-shared-wl')">📝 Shared Watchlist</button>
+    </div>
+    <div id="fp-for-us" class="fp-content">
+      <div class="spin"></div>
+    </div>
+    <div id="fp-compat" class="fp-content" style="display:none">
+      <div class="spin"></div>
+    </div>
+    <div id="fp-shared-wl" class="fp-content" style="display:none">
+      <button class="btn-primary" style="margin-bottom:18px" onclick="createShared(${fid},'${fname}')">+ Create New Shared Watchlist</button>
+      <div id="sharedListsFor${fid}"><div class="spin"></div></div>
+    </div>`;
+
+  // Load all three tabs in parallel
+  loadForUs();
+  loadCompat(fid, fname, fcolor);
+  loadSharedFor(fid);
+}
+
+let forUsTimer = null;
+function scheduleForUs() {
+  clearTimeout(forUsTimer);
+  forUsTimer = setTimeout(loadForUs, 700);
+}
+
+function setForUsMedia(btn, type) {
+  document.querySelectorAll('.forus-tgbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  forUsMediaType = type;
+  loadForUs();
+}
+
+async function loadForUs() {
+  const container = document.getElementById('fp-for-us');
+  if (!container || !activeFid) return;
+
+  forUsYearFrom = document.getElementById('yrFrom')?.value || '';
+  forUsYearTo   = document.getElementById('yrTo')?.value   || '';
+
+  container.innerHTML = '<div style="text-align:center;padding:40px"><div class="spin" style="margin:0 auto 14px"></div><p style="font-size:13px;color:var(--t3)">Analysing your combined taste...</p></div>';
 
   try {
-    const [cd, fd] = await Promise.all([
-      fetch(`/api/friends/${fid}/compatibility`).then(r => r.json()),
-      fetch(`/api/friends/${fid}/for-us?count=50`).then(r => r.json())
-    ]);
-    const sc = cd.score;
-    const col = sc >= 70 ? 'var(--peach-deep)' : sc >= 40 ? 'var(--peach-dark)' : 'var(--t2)';
-    const desc = sc >= 80 ? '🎉 Exceptional match!' : sc >= 60 ? '👍 Great compatibility' : sc >= 40 ? '😊 Some common ground' : '🤷 Different tastes';
+    const params = new URLSearchParams({ count: 50, media_type: forUsMediaType });
+    if (forUsYearFrom) params.set('year_from', forUsYearFrom);
+    if (forUsYearTo)   params.set('year_to',   forUsYearTo);
 
-    // Build "for-us" cards HTML
-    let cardsHtml;
-    if (fd.length) {
-      cardsHtml = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(145px,1fr))">${fd.map(item => cardHTML(item)).join('')}</div>`;
-    } else {
-      cardsHtml = `<div style="text-align:center;padding:40px 0;color:var(--t3)">
-        <div style="font-size:36px;margin-bottom:10px">🎬</div>
-        <p style="font-size:13px;line-height:1.7">Add movies to your watchlists and rate things<br>to get personalised recommendations!</p>
-      </div>`;
+    const fd = await fetch(`/api/friends/${activeFid}/for-us?${params}`).then(r => r.json());
+
+    if (!fd.length) {
+      container.innerHTML = '<div style="text-align:center;padding:48px 0;color:var(--t3)"><div style="font-size:36px;margin-bottom:12px">🎬</div><p style="font-size:14px;line-height:1.8">Rate more movies and add items to your watchlist<br>to unlock personalised suggestions!</p></div>';
+      return;
     }
 
-    panel.innerHTML = `
-      <div class="fp-header">
-        <div class="fp-avatar-lg" style="background:${fcolor}">${fname[0].toUpperCase()}</div>
-        <div class="fp-user"><h3>${fname}</h3><p>@${fname}</p></div>
-        <div class="compat-pill">
-          <div class="compat-num" style="color:${col}">${sc}%</div>
-          <div class="compat-lbl">Match Score</div>
-          <div class="compat-bar-wrap"><div class="compat-bar" style="width:${sc}%"></div></div>
-          <div style="font-size:11px;color:var(--t3);margin-top:5px;font-weight:500">${desc}</div>
-        </div>
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <p style="font-size:13px;color:var(--t3);margin:0;font-weight:500">Ranked by combined taste match · neither of you has seen these</p>
+        <span style="font-size:11px;font-weight:700;color:var(--peach-dark);background:var(--accent-dim);border:1px solid var(--accent-bdr);padding:3px 10px;border-radius:50px;flex-shrink:0">${fd.length} picks</span>
       </div>
-      <div class="fp-tabs">
-        <button class="fp-tab active" onclick="fpTab(this,'fp-for-us')">🎯 Find For Us (${fd.length} picks)</button>
-        <button class="fp-tab" onclick="fpTab(this,'fp-shared-wl')">📝 Shared Watchlist</button>
-      </div>
-      <div id="fp-for-us" class="fp-content">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <p style="font-size:13px;color:var(--t3);font-weight:500;margin:0">Top picks neither of you has seen — ranked by combined taste match</p>
-          <span style="font-size:11px;font-weight:700;color:var(--peach-dark);background:var(--accent-dim);border:1px solid var(--accent-bdr);padding:3px 10px;border-radius:50px">${fd.length} results</span>
-        </div>
-        ${cardsHtml}
-      </div>
-      <div id="fp-shared-wl" class="fp-content" style="display:none">
-        <button class="btn-primary" style="margin-bottom:18px" onclick="createShared(${fid},'${fname}')">+ Create New Shared Watchlist</button>
-        <div id="sharedListsFor${fid}"><div class="spin"></div></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(145px,1fr))">
+        ${fd.map(item => cardHTML(item)).join('')}
       </div>`;
-
-    loadSharedFor(fid);
   } catch(e) {
-    panel.innerHTML = '<div class="fp-empty"><p style="color:var(--t3)">Failed to load. Please try again.</p></div>';
-    console.error(e);
+    container.innerHTML = '<div class="fp-empty"><p style="color:var(--t3)">Failed to load. Please try again.</p></div>';
   }
+}
+
+async function loadCompat(fid, fname, fcolor) {
+  const container = document.getElementById('fp-compat');
+  if (!container) return;
+  try {
+    const cd = await fetch(`/api/friends/${fid}/compatibility`).then(r => r.json());
+    const sc = cd.score;
+    const col = sc >= 70 ? 'var(--peach-deep)' : sc >= 40 ? 'var(--peach-dark)' : 'var(--t2)';
+    const desc = sc >= 80 ? '🎉 Exceptional match! You two have incredibly similar taste.' :
+                 sc >= 60 ? '👍 Great compatibility! You\'ll find lots to watch together.' :
+                 sc >= 40 ? '😊 Some overlap — you share a few key interests.' :
+                             '🤷 Different tastes — but variety is the spice of life!';
+
+    container.innerHTML = `
+      <div style="text-align:center;padding:28px 0 20px">
+        <div style="font-size:72px;font-weight:800;font-family:'Poppins',sans-serif;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;margin-bottom:6px">${sc}%</div>
+        <div style="font-size:14px;font-weight:600;color:var(--t);margin-bottom:8px">Compatibility Score</div>
+        <div style="background:var(--sur2);border-radius:50px;height:8px;width:220px;margin:0 auto 16px;overflow:hidden;border:1px solid var(--bdr2)">
+          <div style="height:100%;width:${sc}%;background:var(--grad);border-radius:50px;transition:width 1s ease"></div>
+        </div>
+        <p style="font-size:14px;color:var(--t2);max-width:280px;margin:0 auto;line-height:1.7">${desc}</p>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+        <div style="background:var(--sur2);border-radius:var(--r);padding:16px;border:1.5px solid var(--bdr2);text-align:center">
+          <div style="font-size:22px;margin-bottom:6px">🎬</div>
+          <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;font-weight:600">Rating similarity</div>
+          <div style="font-size:20px;font-weight:700;color:var(--peach-dark);margin-top:4px;font-family:'Poppins',sans-serif">${sc >= 50 ? 'High' : sc >= 30 ? 'Medium' : 'Low'}</div>
+        </div>
+        <div style="background:var(--sur2);border-radius:var(--r);padding:16px;border:1.5px solid var(--bdr2);text-align:center">
+          <div style="font-size:22px;margin-bottom:6px">🎭</div>
+          <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;font-weight:600">Genre overlap</div>
+          <div style="font-size:20px;font-weight:700;color:var(--peach-dark);margin-top:4px;font-family:'Poppins',sans-serif">${sc >= 60 ? 'Strong' : sc >= 35 ? 'Moderate' : 'Weak'}</div>
+        </div>
+      </div>`;
+  } catch(e) {}
 }
 
 function fpTab(btn, targetId) {
   document.querySelectorAll('.fp-tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  ['fp-for-us','fp-shared-wl'].forEach(id => {
+  ['fp-for-us','fp-compat','fp-shared-wl'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = id === targetId ? 'block' : 'none';
   });
@@ -288,7 +352,7 @@ async function loadSharedFor(fid) {
         </div>
         <div style="color:var(--peach-dark);font-size:12px;font-weight:600">Open →</div>
       </div>`).join('');
-  } catch(e) { container.innerHTML = '<p style="color:var(--t3);font-size:13px">Failed to load lists</p>'; }
+  } catch(e) { container.innerHTML = '<p style="color:var(--t3);font-size:13px">Failed to load</p>'; }
 }
 
 async function createShared(fid, fname) {
@@ -338,9 +402,7 @@ async function refreshModal() {
     body.innerHTML = data.items.map(item => `
       <div class="wl-item-row">
         <div style="width:42px;height:60px;border-radius:7px;overflow:hidden;background:var(--sur3);flex-shrink:0">
-          ${item.poster_path
-            ? `<img src="https://image.tmdb.org/t/p/w92${item.poster_path}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='🎬'">`
-            : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">🎬</div>'}
+          ${item.poster_path ? `<img src="https://image.tmdb.org/t/p/w92${item.poster_path}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='🎬'">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">🎬</div>'}
         </div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:14px;color:var(--t);font-family:Poppins,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title}</div>
@@ -389,7 +451,7 @@ function handleModalSearch(q) {
 
 async function addToModal(safeItem) {
   if (!activeListId) return;
-  const item = JSON.parse(safeItem.replace(/&quot;/g,'"'));
+  const item = JSON.parse(safeItem.replace(/&quot;/g, '"'));
   try {
     const res = await fetch(`/api/shared-watchlist/${activeListId}/item`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -402,7 +464,7 @@ async function addToModal(safeItem) {
       document.getElementById('modalResults').classList.remove('open');
       await refreshModal();
     } else {
-      showToast(data.error === 'Already in list' ? '📋 Already in this list' : '❌ ' + (data.error || 'Error'));
+      showToast(data.error === 'Already in list' ? '📋 Already in list' : '❌ ' + (data.error || 'Error'));
     }
   } catch(e) { showToast('❌ Error adding'); }
 }
