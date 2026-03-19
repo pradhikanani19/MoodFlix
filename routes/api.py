@@ -334,26 +334,25 @@ def for_us(friend_id):
         friend = User.query.get_or_404(friend_id)
         my_ratings = [r.to_dict() for r in current_user.ratings]
         f_ratings = [r.to_dict() for r in friend.ratings]
+        # Add watchlist items as implicit taste signals (score=3)
         my_wl = WatchlistItem.query.filter_by(user_id=current_user.id).all()
         f_wl = WatchlistItem.query.filter_by(user_id=friend.id).all()
         rated_ids = {r['tmdb_id'] for r in my_ratings}
         for w in my_wl:
             if w.tmdb_id not in rated_ids:
                 my_ratings.append({'tmdb_id': w.tmdb_id, 'score': 3,
-                                   'genre_ids': w.genre_ids or '', 'original_language': w.original_language or ''})
+                                   'genre_ids': w.genre_ids or '',
+                                   'original_language': w.original_language or ''})
         f_rated_ids = {r['tmdb_id'] for r in f_ratings}
         for w in f_wl:
             if w.tmdb_id not in f_rated_ids:
                 f_ratings.append({'tmdb_id': w.tmdb_id, 'score': 3,
-                                   'genre_ids': w.genre_ids or '', 'original_language': w.original_language or ''})
+                                   'genre_ids': w.genre_ids or '',
+                                   'original_language': w.original_language or ''})
         media_type = request.args.get('media_type', 'movie')
-        count = int(request.args.get('count', 50))
-        year_from = request.args.get('year_from', type=int)
-        year_to = request.args.get('year_to', type=int)
-        results = tmdb().for_us(my_ratings, f_ratings, media_type, count=count,
-                                 year_from=year_from, year_to=year_to)
+        results = tmdb().for_us(my_ratings, f_ratings, media_type=media_type, count=30)
         if not results:
-            results = tmdb().trending(media_type, 'week')[:count]
+            results = tmdb().trending(media_type, 'week')[:30]
         return jsonify(results)
     except Exception as e:
         err = traceback.format_exc()

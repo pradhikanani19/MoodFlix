@@ -19,8 +19,6 @@
 .forus-toggle{display:flex;background:var(--sur);border-radius:50px;border:1.5px solid var(--bdr2);overflow:hidden;padding:2px;gap:2px}
 .forus-tgbtn{padding:6px 14px;border:none;cursor:pointer;font-weight:500;font-size:12px;background:transparent;color:var(--t2);transition:all 0.18s;font-family:inherit;border-radius:50px}
 .forus-tgbtn.active{background:var(--grad);color:#fff;font-weight:600}
-.yr-input{background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:6px 10px;font-size:12px;color:var(--t);outline:none;font-family:inherit;width:80px;transition:all 0.2s}
-.yr-input:focus{border-color:var(--accent-bdr)}
 </style>
 {% endblock %}
 
@@ -130,8 +128,7 @@ let activeListId = null;
 let modalSearchTimer = null;
 let activeFid = null;
 let forUsMediaType = 'movie';
-let forUsYearFrom = '';
-let forUsYearTo = '';
+
 
 // Load pending requests
 (async () => {
@@ -209,13 +206,7 @@ async function selectFriend(fid, fname, fcolor) {
         <button class="forus-tgbtn active" onclick="setForUsMedia(this,'movie')">🎬 Movies</button>
         <button class="forus-tgbtn" onclick="setForUsMedia(this,'tv')">📺 Series</button>
       </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <label style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:1px">Year</label>
-        <input type="number" class="yr-input" id="yrFrom" placeholder="From" min="1900" max="2025" oninput="scheduleForUs()">
-        <span style="color:var(--t3);font-size:12px">–</span>
-        <input type="number" class="yr-input" id="yrTo" placeholder="To" min="1900" max="2025" oninput="scheduleForUs()">
-      </div>
-      <button onclick="loadForUs()" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:var(--sh)">🔄 Refresh</button>
+      <button onclick="loadForUs()" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:var(--sh);margin-left:auto">🔄 Refresh</button>
     </div>
     <div class="fp-tabs">
       <button class="fp-tab active" onclick="fpTab(this,'fp-for-us')">🎯 Find For Us</button>
@@ -239,11 +230,6 @@ async function selectFriend(fid, fname, fcolor) {
   loadSharedFor(fid);
 }
 
-let forUsTimer = null;
-function scheduleForUs() {
-  clearTimeout(forUsTimer);
-  forUsTimer = setTimeout(loadForUs, 700);
-}
 
 function setForUsMedia(btn, type) {
   document.querySelectorAll('.forus-tgbtn').forEach(b => b.classList.remove('active'));
@@ -256,16 +242,10 @@ async function loadForUs() {
   const container = document.getElementById('fp-for-us');
   if (!container || !activeFid) return;
 
-  forUsYearFrom = document.getElementById('yrFrom')?.value || '';
-  forUsYearTo   = document.getElementById('yrTo')?.value   || '';
-
   container.innerHTML = '<div style="text-align:center;padding:40px"><div class="spin" style="margin:0 auto 14px"></div><p style="font-size:13px;color:var(--t3)">Analysing your combined taste...</p></div>';
 
   try {
-    const params = new URLSearchParams({ count: 50, media_type: forUsMediaType });
-    if (forUsYearFrom) params.set('year_from', forUsYearFrom);
-    if (forUsYearTo)   params.set('year_to',   forUsYearTo);
-
+    const params = new URLSearchParams({ media_type: forUsMediaType });
     const resp = await fetch(`/api/friends/${activeFid}/for-us?${params}`);
     const fd = await resp.json();
 
