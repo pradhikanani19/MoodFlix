@@ -345,9 +345,11 @@ class TMDBClient:
 
             # BOTH must enjoy it — geometric mean penalises one-sided matches
             if u1 > 0 and u2 > 0:
+
                 both = _math.sqrt(u1 * u2)
             else:
-                continue  # skip if either user wouldn't like it at all
+    # instead of skipping, give low score
+                both = (u1 + u2) / 2 * 0.5
 
             # Quality
             rating = item.get('vote_average', 6)
