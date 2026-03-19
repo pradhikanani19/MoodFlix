@@ -332,9 +332,26 @@ def for_us(friend_id):
     friend = User.query.get_or_404(friend_id)
     my_ratings = [r.to_dict() for r in current_user.ratings]
     f_ratings = [r.to_dict() for r in friend.ratings]
+    # Also use watchlist as implicit taste signal
+    my_wl = WatchlistItem.query.filter_by(user_id=current_user.id).all()
+    f_wl = WatchlistItem.query.filter_by(user_id=friend.id).all()
+    # Synthesise ratings from watchlist items if not rated
+    rated_ids = {r['tmdb_id'] for r in my_ratings}
+    for w in my_wl:
+        if w.tmdb_id not in rated_ids:
+            my_ratings.append({'tmdb_id': w.tmdb_id, 'score': 3,
+                               'genre_ids': w.genre_ids or '', 'original_language': w.original_language or ''})
+    f_rated_ids = {r['tmdb_id'] for r in f_ratings}
+    for w in f_wl:
+        if w.tmdb_id not in f_rated_ids:
+            f_ratings.append({'tmdb_id': w.tmdb_id, 'score': 3,
+                               'genre_ids': w.genre_ids or '', 'original_language': w.original_language or ''})
     media_type = request.args.get('media_type', 'movie')
-    # Get more results — fetch 3 pages and combine
-    results = tmdb().for_us(my_ratings, f_ratings, media_type, count=20)
+    count = int(request.args.get('count', 24))
+    results = tmdb().for_us(my_ratings, f_ratings, media_type, count=count)
+    # If still empty (new users with no data), return trending
+    if not results:
+        results = tmdb().trending(media_type, 'week')[:count]
     return jsonify(results)
 
 

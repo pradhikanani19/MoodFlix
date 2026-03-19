@@ -1,76 +1,86 @@
 {% extends "base.html" %}
 {% block title %}Friends – MoodFlix{% endblock %}
+
+{% block head %}
+<style>
+.shared-modal-wrap{display:none;position:fixed;inset:0;background:rgba(43,43,43,0.55);z-index:600;align-items:center;justify-content:center;padding:20px}
+.shared-modal-wrap.open{display:flex}
+.shared-modal-box{background:var(--sur);border-radius:var(--rl);width:min(660px,100%);max-height:90vh;overflow:hidden;box-shadow:var(--sh-lg);border:1.5px solid var(--bdr2);display:flex;flex-direction:column}
+.shared-modal-head{padding:18px 22px;border-bottom:1.5px solid var(--bdr2);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,var(--sur2),var(--bg2));flex-shrink:0}
+.shared-modal-search{padding:14px 22px;border-bottom:1.5px solid var(--bdr2);background:var(--bg2);flex-shrink:0;position:relative}
+.shared-modal-results{position:absolute;left:22px;right:22px;top:calc(100% - 6px);background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;z-index:10;display:none}
+.shared-modal-results.open{display:block}
+.shared-modal-body{flex:1;overflow-y:auto;padding:16px 22px}
+.sri-pick{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background 0.15s;border-bottom:1px solid var(--bdr2)}
+.sri-pick:hover{background:var(--sur2)}
+.wl-item-row{display:flex;align-items:center;gap:13px;padding:11px 0;border-bottom:1px solid var(--bdr2)}
+.wl-item-row:last-child{border-bottom:none}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page container">
   <div class="page-hdr">
     <h1>Friends <span class="gtxt">& Compatibility</span></h1>
-    <p>See who shares your taste, build shared watchlists, and find films you'll both love</p>
+    <p>See who shares your taste, build shared watchlists, and discover films you'll both love</p>
   </div>
 
-  <!-- PENDING REQUESTS BANNER -->
+  <!-- PENDING REQUESTS -->
   <div id="pendingBanner" style="display:none;background:linear-gradient(135deg,#FFF0E8,#FFE4D8);border:1.5px solid var(--accent-bdr);border-radius:var(--r);padding:16px 20px;margin-bottom:20px">
-    <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px;color:var(--peach-deep);margin-bottom:12px">
-      🔔 Friend Requests
-    </div>
+    <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:14px;color:var(--peach-deep);margin-bottom:12px">🔔 Pending Friend Requests</div>
     <div id="pendingList"></div>
   </div>
 
   <div class="friends-layout">
     <div class="friends-sidebar">
 
-      <!-- Add Friend -->
       <div class="card-block">
         <h3>Add a Friend</h3>
         <div style="display:flex;gap:9px;align-items:stretch">
           <input type="text" id="fuInput" placeholder="Enter username..."
-            style="flex:1;min-width:0;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 15px;font-size:13px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
-            onfocus="this.style.borderColor='var(--accent-bdr)';this.style.boxShadow='0 0 0 3px rgba(255,183,165,0.12)'"
-            onblur="this.style.borderColor='var(--bdr2)';this.style.boxShadow='none'"
+            style="flex:1;min-width:0;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+            onfocus="this.style.borderColor='var(--accent-bdr)'"
+            onblur="this.style.borderColor='var(--bdr2)'"
             onkeydown="if(event.key==='Enter')addFriend()">
           <button onclick="addFriend()"
-            style="flex-shrink:0;background:var(--grad);color:#fff;border:none;border-radius:var(--r);padding:0 22px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap;box-shadow:var(--sh);transition:all 0.2s"
-            onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='var(--sh-md)'"
-            onmouseout="this.style.transform='none';this.style.boxShadow='var(--sh)'">
-            Send Request
+            style="flex-shrink:0;background:var(--grad);color:#fff;border:none;border-radius:var(--r);padding:0 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap;box-shadow:var(--sh);transition:all 0.2s">
+            Send
           </button>
         </div>
         <div id="fuMsg" style="display:none;margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500"></div>
       </div>
 
-      <!-- Friends List -->
       <div class="card-block">
         <h3>Your Friends ({{ friends|length }})</h3>
         {% if friends %}
-        <div id="friendsList">
-          {% for f in friends %}
-          <div class="friend-row" id="fr-{{ f.id }}" onclick="selectFriend({{ f.id }},'{{ f.username }}','{{ f.avatar_color }}')">
-            <div class="favatar" style="background:{{ f.avatar_color }}">{{ f.username[0].upper() }}</div>
-            <div style="flex:1;min-width:0">
-              <div class="fr-name">{{ f.username }}</div>
-              <div class="fr-compat" id="fc-{{ f.id }}">Calculating...</div>
-            </div>
-            <div style="color:var(--t3);font-size:18px;line-height:1">›</div>
+        {% for f in friends %}
+        <div class="friend-row" id="fr-{{ f.id }}" onclick="selectFriend({{ f.id }},'{{ f.username }}','{{ f.avatar_color }}')">
+          <div class="favatar" style="background:{{ f.avatar_color }}">{{ f.username[0].upper() }}</div>
+          <div style="flex:1;min-width:0">
+            <div class="fr-name">{{ f.username }}</div>
+            <div class="fr-compat" id="fc-{{ f.id }}">Loading...</div>
           </div>
-          {% endfor %}
+          <div style="color:var(--t3);font-size:18px">›</div>
         </div>
+        {% endfor %}
         {% else %}
-        <div style="text-align:center;padding:32px 0;color:var(--t3)">
-          <div style="font-size:36px;margin-bottom:10px">👥</div>
-          <p style="font-size:13px">No friends yet.<br>Send a request above!</p>
+        <div style="text-align:center;padding:28px 0;color:var(--t3)">
+          <div style="font-size:34px;margin-bottom:8px">👥</div>
+          <p style="font-size:13px">No friends yet!</p>
         </div>
         {% endif %}
       </div>
 
       {% if shared_lists %}
       <div class="card-block">
-        <h3>Shared Lists ({{ shared_lists|length }})</h3>
+        <h3>Shared Lists</h3>
         {% for sl in shared_lists %}
-        <div onclick="openSharedList({{ sl.id }},'{{ sl.name }}')"
-          style="padding:12px 14px;background:var(--sur2);border-radius:var(--rs);margin-bottom:9px;border:1.5px solid var(--bdr2);cursor:pointer;transition:all 0.2s"
+        <div onclick="openModal({{ sl.id }},'{{ sl.name|e }}')"
+          style="padding:11px 13px;background:var(--sur2);border-radius:var(--rs);margin-bottom:8px;border:1.5px solid var(--bdr2);cursor:pointer;transition:all 0.18s"
           onmouseover="this.style.borderColor='var(--accent-bdr)'"
           onmouseout="this.style.borderColor='var(--bdr2)'">
-          <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:var(--t);margin-bottom:3px">{{ sl.name }}</div>
-          <div style="font-size:11px;color:var(--t3);font-weight:500">{{ sl.items|length }} items</div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:var(--t)">{{ sl.name }}</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px">{{ sl.items|length }} items · tap to open</div>
         </div>
         {% endfor %}
       </div>
@@ -81,37 +91,33 @@
     <!-- FRIEND DETAIL PANEL -->
     <div class="friend-panel" id="friendPanel">
       <div class="fp-empty">
-        <div style="font-size:52px;margin-bottom:14px">💞</div>
-        <h3 style="color:var(--t2);font-size:20px;margin-bottom:8px">Select a friend</h3>
-        <p style="font-size:14px;max-width:250px;line-height:1.7">Click on a friend to see your compatibility score and discover films you'll both enjoy</p>
+        <div style="font-size:48px;margin-bottom:12px">💞</div>
+        <h3 style="color:var(--t2);font-size:19px;margin-bottom:8px">Select a friend</h3>
+        <p style="font-size:13px;max-width:240px;line-height:1.7">Click a friend to see compatibility and get movie recommendations for both of you</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- SHARED WATCHLIST MODAL -->
-<div id="sharedModal" style="display:none;position:fixed;inset:0;background:rgba(43,43,43,0.5);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
-  <div style="background:var(--sur);border-radius:var(--rl);padding:0;width:min(680px,95vw);max-height:85vh;overflow:hidden;box-shadow:var(--sh-lg);border:1.5px solid var(--bdr2);display:flex;flex-direction:column">
-    <div style="padding:20px 24px;border-bottom:1.5px solid var(--bdr2);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,var(--sur2),var(--bg2))">
+<div class="shared-modal-wrap" id="sharedModal">
+  <div class="shared-modal-box">
+    <div class="shared-modal-head">
       <div>
-        <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:17px;color:var(--t)" id="modalListName"></div>
-        <div style="font-size:12px;color:var(--t3);margin-top:2px" id="modalListMeta"></div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:var(--t)" id="modalTitle">Shared Watchlist</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:2px" id="modalMeta"></div>
       </div>
-      <button onclick="closeSharedModal()" style="background:var(--sur3);border:1.5px solid var(--bdr2);border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:16px;color:var(--t2);display:flex;align-items:center;justify-content:center">×</button>
+      <button onclick="closeModal()" style="width:32px;height:32px;border-radius:50%;background:var(--sur3);border:1.5px solid var(--bdr2);cursor:pointer;font-size:18px;color:var(--t2);display:flex;align-items:center;justify-content:center;line-height:1">×</button>
     </div>
-    <!-- Add movie to shared list -->
-    <div style="padding:16px 24px;border-bottom:1.5px solid var(--bdr2);background:var(--bg2)">
-      <div style="display:flex;gap:9px;align-items:stretch">
-        <input type="text" id="sharedSearch" placeholder="Search a movie or series to add..."
-          style="flex:1;background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:9px 14px;font-size:13px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
-          onfocus="this.style.borderColor='var(--accent-bdr)'"
-          onblur="this.style.borderColor='var(--bdr2)'"
-          oninput="searchForShared(this.value)">
-      </div>
-      <div id="sharedSearchResults" style="display:none;background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);margin-top:8px;max-height:180px;overflow-y:auto"></div>
+    <div class="shared-modal-search">
+      <input type="text" id="modalSearch" placeholder="🔍 Search movies or series to add..." autocomplete="off"
+        style="width:100%;background:var(--sur);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 15px;font-size:13px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+        onfocus="this.style.borderColor='var(--accent-bdr)'"
+        onblur="this.style.borderColor='var(--bdr2)'"
+        oninput="handleModalSearch(this.value)">
+      <div class="shared-modal-results" id="modalResults"></div>
     </div>
-    <!-- List items -->
-    <div style="flex:1;overflow-y:auto;padding:16px 24px" id="sharedListItems">
+    <div class="shared-modal-body" id="modalBody">
       <div class="spin"></div>
     </div>
   </div>
@@ -120,23 +126,25 @@
 
 {% block scripts %}
 <script>
-let activeSharedListId = null;
-let sharedSearchTimeout = null;
+let activeListId = null;
+let modalSearchTimer = null;
 
-// Load pending friend requests
+// Load pending requests
 (async () => {
   try {
     const reqs = await (await fetch('/api/friend-requests')).json();
-    if (reqs.length > 0) {
-      document.getElementById('pendingBanner').style.display = 'block';
-      document.getElementById('pendingList').innerHTML = reqs.map(r => `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <div style="width:36px;height:36px;border-radius:50%;background:${r.sender_avatar_color};color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;flex-shrink:0">${r.sender_username[0].toUpperCase()}</div>
-          <div style="flex:1"><div style="font-weight:600;font-size:13px;color:var(--t)">${r.sender_username}</div><div style="font-size:11px;color:var(--t3)">wants to be your friend</div></div>
-          <button onclick="respondRequest(${r.id},'accept')" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:var(--sh)">Accept</button>
-          <button onclick="respondRequest(${r.id},'reject')" style="background:transparent;color:var(--t3);border:1.5px solid var(--bdr2);border-radius:50px;padding:6px 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Decline</button>
-        </div>`).join('');
-    }
+    if (!reqs.length) return;
+    document.getElementById('pendingBanner').style.display = 'block';
+    document.getElementById('pendingList').innerHTML = reqs.map(r => `
+      <div style="display:flex;align-items:center;gap:11px;padding:8px 0">
+        <div style="width:36px;height:36px;border-radius:50%;background:${r.sender_avatar_color};color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;flex-shrink:0">${r.sender_username[0].toUpperCase()}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px;color:var(--t)">${r.sender_username}</div>
+          <div style="font-size:11px;color:var(--t3)">wants to be friends</div>
+        </div>
+        <button onclick="respond(${r.id},'accept')" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif">Accept</button>
+        <button onclick="respond(${r.id},'reject')" style="background:transparent;color:var(--t3);border:1.5px solid var(--bdr2);border-radius:50px;padding:6px 14px;font-size:12px;cursor:pointer">Decline</button>
+      </div>`).join('');
   } catch(e) {}
 })();
 
@@ -154,11 +162,11 @@ let sharedSearchTimeout = null;
   } catch(e) {}
 })();
 
-async function respondRequest(id, action) {
+async function respond(id, action) {
   try {
     await fetch(`/api/friend-requests/${id}/${action}`, { method: 'POST' });
-    showToast(action === 'accept' ? '✅ Friend request accepted!' : 'Request declined');
-    setTimeout(() => location.reload(), 900);
+    showToast(action === 'accept' ? '✅ Now friends!' : 'Request declined');
+    setTimeout(() => location.reload(), 800);
   } catch(e) { showToast('❌ Error'); }
 }
 
@@ -169,21 +177,15 @@ async function addFriend() {
   if (!username) return;
   try {
     const res = await fetch('/api/friends/add', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ username })
     });
     const data = await res.json();
     if (data.success) {
-      if (data.pending) {
-        msg.style.cssText = 'display:block;background:rgba(255,183,165,0.12);color:var(--peach-deep);border:1.5px solid var(--accent-bdr);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500';
-        msg.textContent = '📨 Friend request sent to ' + username + '!';
-      } else {
-        msg.style.cssText = 'display:block;background:rgba(255,183,165,0.12);color:var(--peach-deep);border:1.5px solid var(--accent-bdr);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500';
-        msg.textContent = '✅ You are now friends with ' + username + '!';
-        setTimeout(() => location.reload(), 1200);
-      }
+      msg.style.cssText = 'display:block;background:rgba(255,183,165,0.12);color:var(--peach-deep);border:1.5px solid var(--accent-bdr);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500';
+      msg.textContent = data.pending ? '📨 Request sent to ' + username + '!' : '✅ Now friends with ' + username + '!';
       input.value = '';
+      if (!data.pending) setTimeout(() => location.reload(), 1200);
     } else {
       msg.style.cssText = 'display:block;background:var(--sur2);color:var(--t2);border:1.5px solid var(--bdr2);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500';
       msg.textContent = data.error || 'User not found';
@@ -198,16 +200,29 @@ async function selectFriend(fid, fname, fcolor) {
   document.querySelectorAll('.friend-row').forEach(r => r.classList.remove('active-fr'));
   const row = document.getElementById('fr-' + fid);
   if (row) row.classList.add('active-fr');
+
   const panel = document.getElementById('friendPanel');
-  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:320px"><div class="spin"></div></div>';
+  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px"><div class="spin"></div></div>';
+
   try {
     const [cd, fd] = await Promise.all([
       fetch(`/api/friends/${fid}/compatibility`).then(r => r.json()),
-      fetch(`/api/friends/${fid}/for-us`).then(r => r.json())
+      fetch(`/api/friends/${fid}/for-us?count=24`).then(r => r.json())
     ]);
     const sc = cd.score;
     const col = sc >= 70 ? 'var(--peach-deep)' : sc >= 40 ? 'var(--peach-dark)' : 'var(--t2)';
-    const desc = sc >= 80 ? '🎉 Exceptional taste match!' : sc >= 60 ? '👍 Great compatibility' : sc >= 40 ? '😊 Some common ground' : '🤷 Very different tastes';
+    const desc = sc >= 80 ? '🎉 Exceptional match!' : sc >= 60 ? '👍 Great compatibility' : sc >= 40 ? '😊 Some common ground' : '🤷 Different tastes';
+
+    // Build "for-us" cards HTML
+    let cardsHtml;
+    if (fd.length) {
+      cardsHtml = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(145px,1fr))">${fd.map(item => cardHTML(item)).join('')}</div>`;
+    } else {
+      cardsHtml = `<div style="text-align:center;padding:40px 0;color:var(--t3)">
+        <div style="font-size:36px;margin-bottom:10px">🎬</div>
+        <p style="font-size:13px;line-height:1.7">Add movies to your watchlists and rate things<br>to get personalised recommendations!</p>
+      </div>`;
+    }
 
     panel.innerHTML = `
       <div class="fp-header">
@@ -217,207 +232,195 @@ async function selectFriend(fid, fname, fcolor) {
           <div class="compat-num" style="color:${col}">${sc}%</div>
           <div class="compat-lbl">Match Score</div>
           <div class="compat-bar-wrap"><div class="compat-bar" style="width:${sc}%"></div></div>
-          <div style="font-size:11px;color:var(--t3);margin-top:6px;font-weight:500">${desc}</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:5px;font-weight:500">${desc}</div>
         </div>
       </div>
       <div class="fp-tabs">
-        <button class="fp-tab active" onclick="fpTab(this,'for-us')">🎯 Find For Us</button>
-        <button class="fp-tab" onclick="fpTab(this,'shared-wl')">📝 Shared Watchlist</button>
+        <button class="fp-tab active" onclick="fpTab(this,'fp-for-us')">🎯 Find For Us (${fd.length})</button>
+        <button class="fp-tab" onclick="fpTab(this,'fp-shared-wl')">📝 Shared Watchlist</button>
       </div>
       <div id="fp-for-us" class="fp-content">
-        <p style="font-size:13px;color:var(--t3);margin-bottom:18px;font-weight:500">Films neither of you has seen, curated from your combined taste</p>
-        <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(145px,1fr))">
-          ${fd.length
-            ? fd.map(item => cardHTML(item)).join('')
-            : '<div class="empty-state" style="grid-column:1/-1;padding:40px 0"><p>Rate more movies to unlock shared recommendations</p></div>'
-          }
-        </div>
+        <p style="font-size:13px;color:var(--t3);margin-bottom:16px;font-weight:500">Top picks neither of you has seen, based on your combined taste</p>
+        ${cardsHtml}
       </div>
       <div id="fp-shared-wl" class="fp-content" style="display:none">
-        <button class="btn-primary" style="margin-bottom:16px" onclick="createShared(${fid},'${fname}')">+ Create Shared Watchlist</button>
-        <div id="existing-shared-${fid}"></div>
+        <button class="btn-primary" style="margin-bottom:18px" onclick="createShared(${fid},'${fname}')">+ Create New Shared Watchlist</button>
+        <div id="sharedListsFor${fid}"><div class="spin"></div></div>
       </div>`;
 
-    // Load existing shared lists for this friend
-    loadSharedListsFor(fid);
-
+    loadSharedFor(fid);
   } catch(e) {
-    panel.innerHTML = '<div class="fp-empty"><p>Failed to load. Please try again.</p></div>';
+    panel.innerHTML = '<div class="fp-empty"><p style="color:var(--t3)">Failed to load. Please try again.</p></div>';
+    console.error(e);
   }
 }
 
-async function loadSharedListsFor(fid) {
+function fpTab(btn, targetId) {
+  document.querySelectorAll('.fp-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  ['fp-for-us','fp-shared-wl'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = id === targetId ? 'block' : 'none';
+  });
+}
+
+async function loadSharedFor(fid) {
+  const container = document.getElementById('sharedListsFor' + fid);
+  if (!container) return;
   try {
     const lists = await (await fetch('/api/shared-watchlist')).json();
-    const relevant = lists.filter(l => l.creator_id == fid || l.friend_id == fid);
-    const container = document.getElementById('existing-shared-' + fid);
-    if (!container) return;
-    if (!relevant.length) {
-      container.innerHTML = '<div style="background:var(--sur2);border-radius:var(--r);padding:16px 18px;border:1.5px solid var(--bdr2)"><p style="color:var(--t3);font-size:13px;line-height:1.7">No shared watchlists yet. Create one above!</p></div>';
+    const mine = lists.filter(l => l.creator_id == fid || l.friend_id == fid);
+    if (!mine.length) {
+      container.innerHTML = '<div style="background:var(--sur2);border-radius:var(--r);padding:16px;border:1.5px solid var(--bdr2);color:var(--t3);font-size:13px;line-height:1.7">No shared watchlists yet. Create one above!</div>';
       return;
     }
-    container.innerHTML = relevant.map(sl => `
-      <div onclick="openSharedList(${sl.id},'${sl.name}')"
-        style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--sur2);border-radius:var(--r);margin-bottom:10px;border:1.5px solid var(--bdr2);cursor:pointer;transition:all 0.2s"
-        onmouseover="this.style.borderColor='var(--accent-bdr)'"
-        onmouseout="this.style.borderColor='var(--bdr2)'">
+    container.innerHTML = mine.map(sl => `
+      <div onclick="openModal(${sl.id},'${sl.name.replace(/'/g,"&#39;")}')"
+        style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:var(--sur2);border-radius:var(--r);margin-bottom:10px;border:1.5px solid var(--bdr2);cursor:pointer;transition:all 0.18s"
+        onmouseover="this.style.borderColor='var(--accent-bdr)';this.style.transform='translateY(-1px)'"
+        onmouseout="this.style.borderColor='var(--bdr2)';this.style.transform='none'">
         <div>
           <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px;color:var(--t)">${sl.name}</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px">${sl.items.length} items</div>
         </div>
-        <div style="color:var(--peach-dark);font-size:13px;font-weight:500">Open →</div>
+        <div style="color:var(--peach-dark);font-size:12px;font-weight:600">Open →</div>
       </div>`).join('');
-  } catch(e) {}
-}
-
-function fpTab(btn, name) {
-  document.querySelectorAll('.fp-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('fp-for-us').style.display = name === 'for-us' ? 'block' : 'none';
-  document.getElementById('fp-shared-wl').style.display = name === 'shared-wl' ? 'block' : 'none';
+  } catch(e) { container.innerHTML = '<p style="color:var(--t3);font-size:13px">Failed to load lists</p>'; }
 }
 
 async function createShared(fid, fname) {
-  const name = prompt(`Name for your shared watchlist with ${fname}:`, `Movies with ${fname}`);
+  const name = prompt(`Watchlist name with ${fname}:`, `Movies with ${fname}`);
   if (!name) return;
   try {
     const res = await fetch('/api/shared-watchlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ friend_id: fid, name })
     });
     const data = await res.json();
     showToast('✅ Shared watchlist created!');
-    await loadSharedListsFor(fid);
-    openSharedList(data.id, name);
+    await loadSharedFor(fid);
+    openModal(data.id, name);
   } catch(e) { showToast('❌ Error creating list'); }
 }
 
-async function openSharedList(listId, listName) {
-  activeSharedListId = listId;
-  document.getElementById('modalListName').textContent = listName;
-  document.getElementById('sharedModal').style.display = 'flex';
-  document.getElementById('sharedSearch').value = '';
-  document.getElementById('sharedSearchResults').style.display = 'none';
-  await refreshSharedList(listId);
+// ── MODAL ──────────────────────────────────────────────────────
+async function openModal(listId, listName) {
+  activeListId = listId;
+  document.getElementById('modalTitle').textContent = listName;
+  document.getElementById('modalSearch').value = '';
+  document.getElementById('modalResults').classList.remove('open');
+  document.getElementById('sharedModal').classList.add('open');
+  await refreshModal();
 }
 
-function closeSharedModal() {
-  document.getElementById('sharedModal').style.display = 'none';
-  activeSharedListId = null;
+function closeModal() {
+  document.getElementById('sharedModal').classList.remove('open');
+  activeListId = null;
 }
 
-async function refreshSharedList(listId) {
-  const container = document.getElementById('sharedListItems');
-  container.innerHTML = '<div class="spin"></div>';
+document.getElementById('sharedModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+async function refreshModal() {
+  const body = document.getElementById('modalBody');
+  body.innerHTML = '<div class="spin"></div>';
   try {
-    const data = await (await fetch(`/api/shared-watchlist/${listId}`)).json();
-    document.getElementById('modalListMeta').textContent = `${data.items.length} item${data.items.length !== 1 ? 's' : ''}`;
+    const data = await (await fetch(`/api/shared-watchlist/${activeListId}`)).json();
+    document.getElementById('modalMeta').textContent = `${data.items.length} item${data.items.length !== 1 ? 's' : ''}`;
     if (!data.items.length) {
-      container.innerHTML = '<div style="text-align:center;padding:48px 0;color:var(--t3)"><div style="font-size:40px;margin-bottom:12px">🎬</div><p style="font-size:14px">Nothing here yet.<br>Search above to add movies!</p></div>';
+      body.innerHTML = '<div style="text-align:center;padding:44px 0;color:var(--t3)"><div style="font-size:40px;margin-bottom:12px">🎬</div><p style="font-size:14px;line-height:1.8">Nothing here yet.<br>Search above to add movies or series!</p></div>';
       return;
     }
-    container.innerHTML = data.items.map(item => `
-      <div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--bdr2)">
-        <div style="width:44px;height:64px;flex-shrink:0;border-radius:7px;overflow:hidden;background:var(--sur3)">
-          ${item.poster_path ? `<img src="https://image.tmdb.org/t/p/w92${item.poster_path}" style="width:100%;height:100%;object-fit:cover">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:20px">🎬</div>'}
+    body.innerHTML = data.items.map(item => `
+      <div class="wl-item-row">
+        <div style="width:42px;height:60px;border-radius:7px;overflow:hidden;background:var(--sur3);flex-shrink:0">
+          ${item.poster_path
+            ? `<img src="https://image.tmdb.org/t/p/w92${item.poster_path}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML='🎬'">`
+            : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">🎬</div>'}
         </div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:14px;color:var(--t);font-family:Poppins,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.title}</div>
+          <div style="font-weight:600;font-size:14px;color:var(--t);font-family:Poppins,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title}</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px">⭐ ${item.vote_average} · ${item.media_type}</div>
-          ${item.watched ? '<div style="font-size:10px;color:#4CAF50;font-weight:600;margin-top:3px">✓ Watched</div>' : ''}
+          ${item.watched ? '<div style="font-size:10px;color:#4CAF50;font-weight:700;margin-top:3px;letter-spacing:0.3px">✓ WATCHED</div>' : ''}
         </div>
         <div style="display:flex;gap:7px;flex-shrink:0">
-          ${!item.watched ? `<button onclick="markSharedWatched(${listId},${item.id})" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:6px 13px;font-size:11px;font-weight:600;cursor:pointer;font-family:Poppins,sans-serif">✓ Watched</button>` : ''}
-          <button onclick="removeFromShared(${listId},${item.id})" style="background:transparent;color:var(--t3);border:1.5px solid var(--bdr2);border-radius:50px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit">Remove</button>
+          ${!item.watched ? `<button onclick="sharedWatched(${activeListId},${item.id})" style="background:var(--grad);color:#fff;border:none;border-radius:50px;padding:6px 13px;font-size:11px;font-weight:600;cursor:pointer;font-family:Poppins,sans-serif;box-shadow:var(--sh)">✓</button>` : ''}
+          <button onclick="sharedRemove(${activeListId},${item.id})" style="background:transparent;color:var(--t3);border:1.5px solid var(--bdr2);border-radius:50px;padding:5px 11px;font-size:11px;cursor:pointer">✕</button>
         </div>
       </div>`).join('');
-  } catch(e) { container.innerHTML = '<p style="color:var(--t3);text-align:center;padding:32px">Failed to load list</p>'; }
+  } catch(e) { body.innerHTML = '<p style="color:var(--t3);text-align:center;padding:24px">Failed to load</p>'; }
 }
 
-let searchDebounce;
-function searchForShared(q) {
-  clearTimeout(searchDebounce);
-  const resultsDiv = document.getElementById('sharedSearchResults');
-  if (!q.trim()) { resultsDiv.style.display = 'none'; return; }
-  searchDebounce = setTimeout(async () => {
+function handleModalSearch(q) {
+  clearTimeout(modalSearchTimer);
+  const res = document.getElementById('modalResults');
+  if (!q.trim()) { res.classList.remove('open'); return; }
+  modalSearchTimer = setTimeout(async () => {
     try {
       const data = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
-      if (!data.length) { resultsDiv.style.display = 'none'; return; }
-      resultsDiv.style.display = 'block';
-      resultsDiv.innerHTML = data.slice(0, 6).map(item => `
-        <div onclick="addToSharedList(${JSON.stringify(item).replace(/"/g,'&quot;')})"
-          style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bdr2);transition:background 0.15s"
-          onmouseover="this.style.background='var(--sur2)'"
-          onmouseout="this.style.background='transparent'">
-          <div style="width:30px;height:44px;border-radius:5px;overflow:hidden;background:var(--sur3);flex-shrink:0">
-            ${item.poster_path ? `<img src="${item.poster_path}" style="width:100%;height:100%;object-fit:cover">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:14px">🎬</div>'}
+      if (!data.length) { res.classList.remove('open'); return; }
+      res.classList.add('open');
+      res.innerHTML = data.slice(0, 7).map(item => {
+        const safeItem = JSON.stringify({
+          tmdb_id: item.tmdb_id,
+          media_type: item.media_type || 'movie',
+          title: item.title,
+          poster_path: item.poster_path ? item.poster_path.replace('https://image.tmdb.org/t/p/w500','') : null,
+          vote_average: item.vote_average || 0
+        }).replace(/"/g,'&quot;');
+        return `<div class="sri-pick" onclick="addToModal('${safeItem}')">
+          <div style="width:28px;height:40px;border-radius:5px;overflow:hidden;background:var(--sur3);flex-shrink:0">
+            ${item.poster_path ? `<img src="${item.poster_path}" style="width:100%;height:100%;object-fit:cover">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:12px">🎬</div>'}
           </div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:13px;color:var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.title}</div>
-            <div style="font-size:11px;color:var(--t3)">⭐ ${item.vote_average} · ${(item.original_language||'').toUpperCase()}</div>
+            <div style="font-weight:600;font-size:13px;color:var(--t);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title}</div>
+            <div style="font-size:11px;color:var(--t3)">⭐ ${item.vote_average} · ${(item.original_language||'').toUpperCase()} · ${item.media_type||'movie'}</div>
           </div>
-          <div style="font-size:12px;color:var(--peach-dark);font-weight:600">+ Add</div>
-        </div>`).join('');
+          <div style="color:var(--peach-dark);font-size:12px;font-weight:700;flex-shrink:0">+ Add</div>
+        </div>`;
+      }).join('');
     } catch(e) {}
   }, 350);
 }
 
-async function addToSharedList(item) {
-  if (!activeSharedListId) return;
-  // Parse poster path
-  let poster = item.poster_path || null;
-  if (poster && poster.startsWith('http')) {
-    const m = poster.match(/\/[^\/]+\.[a-z]+$/i);
-    poster = m ? m[0] : null;
-  }
+async function addToModal(safeItem) {
+  if (!activeListId) return;
+  const item = JSON.parse(safeItem.replace(/&quot;/g,'"'));
   try {
-    const res = await fetch(`/api/shared-watchlist/${activeSharedListId}/item`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tmdb_id: item.tmdb_id,
-        media_type: item.media_type || 'movie',
-        title: item.title,
-        poster_path: poster,
-        vote_average: item.vote_average || 0
-      })
+    const res = await fetch(`/api/shared-watchlist/${activeListId}/item`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(item)
     });
     const data = await res.json();
     if (res.ok) {
-      showToast(`✨ Added "${item.title}" to shared list`);
-      document.getElementById('sharedSearch').value = '';
-      document.getElementById('sharedSearchResults').style.display = 'none';
-      await refreshSharedList(activeSharedListId);
+      showToast(`✨ Added "${item.title}"`);
+      document.getElementById('modalSearch').value = '';
+      document.getElementById('modalResults').classList.remove('open');
+      await refreshModal();
     } else {
-      showToast(data.error === 'Already in list' ? '📋 Already in this list' : '❌ ' + data.error);
+      showToast(data.error === 'Already in list' ? '📋 Already in this list' : '❌ ' + (data.error || 'Error'));
     }
-  } catch(e) { showToast('❌ Error adding to list'); }
+  } catch(e) { showToast('❌ Error adding'); }
 }
 
-async function markSharedWatched(listId, itemId) {
+async function sharedWatched(listId, itemId) {
   try {
     await fetch(`/api/shared-watchlist/${listId}/item/${itemId}/watched`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ watched: true })
     });
     showToast('✅ Marked as watched!');
-    await refreshSharedList(listId);
+    await refreshModal();
   } catch(e) { showToast('❌ Error'); }
 }
 
-async function removeFromShared(listId, itemId) {
+async function sharedRemove(listId, itemId) {
   try {
     await fetch(`/api/shared-watchlist/${listId}/item/${itemId}`, { method: 'DELETE' });
     showToast('Removed from list');
-    await refreshSharedList(listId);
+    await refreshModal();
   } catch(e) { showToast('❌ Error'); }
 }
-
-// Close modal on backdrop click
-document.getElementById('sharedModal').addEventListener('click', function(e) {
-  if (e.target === this) closeSharedModal();
-});
 </script>
 {% endblock %}
