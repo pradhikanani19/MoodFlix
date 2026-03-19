@@ -351,8 +351,8 @@ def for_us(friend_id):
                                    'original_language': w.original_language or ''})
         media_type = request.args.get('media_type', 'movie')
         results = tmdb().for_us(my_ratings, f_ratings, media_type=media_type, count=30)
-        if not results or len(results) == 0:
-             results = tmdb().trending(media_type, 'week')[:30]
+        if not results:
+            results = tmdb().trending(media_type, 'week')[:30]
         return jsonify(results)
     except Exception as e:
         err = traceback.format_exc()

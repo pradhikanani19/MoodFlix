@@ -326,15 +326,14 @@ class TMDBClient:
         import math as _math
         scored = []
         for item in pool.values():
-            raw = item.get('genre_ids') or []
-
-        try:
+            raw = item.get('genre_ids', [])
             if isinstance(raw, list):
-                 gids = set(int(g) for g in raw if str(g).strip().isdigit())
+                gids = set(int(g) for g in raw if str(g).strip().isdigit())
             else:
                 gids = set(int(g.strip()) for g in str(raw).split(',') if g.strip().isdigit())
-        except:
-            gids = set()
+
+            if not gids:
+                continue
 
             # How strongly do item genres align with SHARED taste?
             # Uses actual shared weights — Romance scores 3x if both love it
@@ -346,11 +345,9 @@ class TMDBClient:
 
             # BOTH must enjoy it — geometric mean penalises one-sided matches
             if u1 > 0 and u2 > 0:
-
                 both = _math.sqrt(u1 * u2)
             else:
-    # instead of skipping, give low score
-                both = (u1 + u2) / 2 * 0.5
+                continue  # skip if either user wouldn't like it at all
 
             # Quality
             rating = item.get('vote_average', 6)
