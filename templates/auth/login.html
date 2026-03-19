@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Login – MoodFlix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="auth-page">
+<div class="blob b1"></div><div class="blob b2"></div>
+<div class="auth-wrap">
+  <a href="{{ url_for('main.landing') }}" class="auth-logo">🎬 MoodFlix</a>
+  <div class="auth-card">
+    <h2>Welcome back 👋</h2>
+    <p>Sign in to continue your cinematic journey</p>
+    <div id="err" class="auth-err" style="display:none"></div>
+    <div class="form-group"><label>Username</label><input type="text" id="username" placeholder="Your username" autocomplete="username"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="password" placeholder="Your password" autocomplete="current-password"></div>
+    <button class="btn-submit" id="loginBtn" onclick="doLogin()">Sign In →</button>
+    <p class="auth-switch">No account yet? <a href="{{ url_for('auth.signup') }}">Create one</a></p>
+  </div>
+</div>
+<script>
+async function doLogin(){
+  const btn=document.getElementById('loginBtn'),err=document.getElementById('err');
+  btn.textContent='Signing in...';btn.disabled=true;err.style.display='none';
+  try{
+    const res=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('username').value,password:document.getElementById('password').value})});
+    const data=await res.json();
+    if(data.redirect){window.location.href=data.redirect;}
+    else{err.textContent=data.error||'Login failed';err.style.display='block';}
+  }catch(e){err.textContent='Something went wrong';err.style.display='block';}
+  btn.textContent='Sign In →';btn.disabled=false;
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+</script>
+</body>
+</html>

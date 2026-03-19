@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Discover – MoodFlix{% endblock %}
+{% block content %}
+<div class="page container">
+  <div class="page-hdr">
+    <h1>Discover <span class="gtxt">Everything</span></h1>
+    <p>Search & filter across 1 million+ titles from every corner of the world</p>
+  </div>
+  <div class="search-big">
+    <span>🔍</span>
+    <input type="text" id="dSearch" placeholder="Search movies, series, actors...">
+    <button onclick="doSearch()">Search</button>
+  </div>
+  <div class="filters-bar">
+    <div class="fg"><label>Media</label>
+      <div class="tg2">
+        <button class="tgbtn active" onclick="setMedia(this,'movie')">🎬 Movies</button>
+        <button class="tgbtn" onclick="setMedia(this,'tv')">📺 Series</button>
+      </div>
+    </div>
+    <div class="fg"><label>Industry</label>
+      <select id="fInd" class="sel"><option value="all">🌍 All</option><option value="hollywood">🎬 Hollywood</option><option value="bollywood">🇮🇳 Bollywood</option><option value="korean">🇰🇷 Korean</option><option value="japanese">🎌 Anime/Japan</option><option value="tollywood">🌶️ Tollywood</option><option value="french">🥐 French</option><option value="spanish">🌮 Spanish</option></select>
+    </div>
+    <div class="fg"><label>Genre</label>
+      <select id="fGenre" class="sel"><option value="">All Genres</option>{% for gid,name in genres.items() %}<option value="{{ gid }}">{{ name }}</option>{% endfor %}</select>
+    </div>
+    <div class="fg"><label>Mood</label>
+      <select id="fMood" class="sel"><option value="">All Moods</option>{% for mood in moods %}<option value="{{ mood }}">{{ mood|replace('-',' ')|title }}</option>{% endfor %}</select>
+    </div>
+    <div class="fg"><label>Year From</label><input type="number" id="fYF" class="sel" placeholder="1990" style="width:95px"></div>
+    <div class="fg"><label>Year To</label><input type="number" id="fYT" class="sel" placeholder="2025" style="width:95px"></div>
+    <div class="fg"><label>Sort By</label>
+      <select id="fSort" class="sel"><option value="popularity.desc">Most Popular</option><option value="vote_average.desc">Top Rated</option><option value="release_date.desc">Newest</option></select>
+    </div>
+    <button class="btn-primary" onclick="applyFilters()">Apply →</button>
+  </div>
+  <div class="discover-info" id="dInfo" style="display:none">
+    <span id="dCount"></span>
+  </div>
+  <div class="grid" id="dGrid">
+    <div class="empty-state">
+      <div style="font-size:56px;margin-bottom:14px">🌍</div>
+      <h3>Explore global cinema</h3>
+      <p>Use filters or search for something specific</p>
+    </div>
+  </div>
+  <button class="btn-load" id="btnMore" style="display:none" onclick="loadMore()">Load More →</button>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let dPage=1,dMedia='movie',dSearchMode=false,dQ='';
+function setMedia(btn,type){document.querySelectorAll('.tg2 .tgbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');dMedia=type;}
+document.getElementById('dSearch').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+async function doSearch(){
+  const q=document.getElementById('dSearch').value.trim();if(!q)return;
+  dSearchMode=true;dQ=q;dPage=1;spin();
+  try{const data=await apiFetch(`/api/search?q=${encodeURIComponent(q)}&page=${dPage}`);renderGrid(data,false);setInfo(`Results for "${q}"`);}
+  catch(e){showToast('Search failed');}
+}
+async function applyFilters(){
+  dSearchMode=false;dPage=1;spin();
+  try{const data=await apiFetch('/api/discover?'+buildParams());renderGrid(data,false);setInfo(data.length+' results');}
+  catch(e){showToast('Failed to load');}
+}
+async function loadMore(){
+  dPage++;
+  document.getElementById('btnMore').textContent='Loading...';
+  document.getElementById('btnMore').disabled=true;
+  try{
+    const data=await apiFetch(dSearchMode?`/api/search?q=${encodeURIComponent(dQ)}&page=${dPage}`:`/api/discover?`+buildParams());
+    renderGrid(data,true);
+  }catch(e){showToast('Failed to load more');}
+  document.getElementById('btnMore').textContent='Load More →';
+  document.getElementById('btnMore').disabled=false;
+}
+function buildParams(){
+  const p=new URLSearchParams();
+  p.set('media_type',dMedia);
+  p.set('industry',document.getElementById('fInd').value);
+  // Send genre and mood for both movies AND TV - backend handles TV logic properly now
+  const g=document.getElementById('fGenre').value;
+  if(g) p.append('genre',g);
+  const m=document.getElementById('fMood').value;
+  if(m) p.append('mood',m);
+  const yf=document.getElementById('fYF').value;if(yf)p.set('year_from',yf);
+  const yt=document.getElementById('fYT').value;if(yt)p.set('year_to',yt);
+  let s=document.getElementById('fSort').value;
+  if(dMedia==='tv'&&s==='release_date.desc')s='popularity.desc';
+  p.set('sort_by',s);p.set('page',dPage);return p.toString();
+}
+async function apiFetch(url){const r=await fetch(url);if(!r.ok)throw new Error('err');return r.json();}
+function spin(){document.getElementById('dGrid').innerHTML='<div class="spin" style="grid-column:1/-1"></div>';document.getElementById('btnMore').style.display='none';}
+function setInfo(t){document.getElementById('dCount').textContent=t;document.getElementById('dInfo').style.display='flex';}
+function renderGrid(data,append){
+  const grid=document.getElementById('dGrid');
+  if(!append)grid.innerHTML='';
+  if(!data.length&&!append){grid.innerHTML='<div class="empty-state"><div style="font-size:48px;margin-bottom:12px">😕</div><h3>No results</h3><p>Try different filters</p></div>';document.getElementById('btnMore').style.display='none';return;}
+  data.forEach(item=>{const d=document.createElement('div');d.innerHTML=cardHTML(item);grid.appendChild(d.firstElementChild);});
+  document.getElementById('btnMore').style.display=data.length>=18?'block':'none';
+}
+(async()=>{spin();try{const data=await apiFetch('/api/trending?media=all&window=week');renderGrid(data,false);setInfo('🔥 Trending this week');}catch(e){document.getElementById('dGrid').innerHTML='<div class="empty-state"><div style="font-size:48px;margin-bottom:12px">🔑</div><h3>Set your TMDB API key</h3><p>Edit the .env file and restart</p></div>';}})();
+</script>
+{% endblock %}

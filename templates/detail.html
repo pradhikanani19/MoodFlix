@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title if item else 'Detail' }} – MoodFlix{% endblock %}
+{% block content %}
+{% if item %}
+<div class="page">
+  {% if item.backdrop_path %}
+  <div class="backdrop" style="background-image:url('{{ item.backdrop_path }}')"><div class="backdrop-ov"></div></div>
+  {% endif %}
+  <div class="container">
+    <div class="detail-layout">
+      <div class="detail-poster">
+        {% if item.poster_path %}<img src="{{ item.poster_path }}" alt="{{ item.title }}">
+        {% else %}<div class="detail-pfb">🎬</div>{% endif %}
+      </div>
+      <div class="detail-info">
+        <div class="dbadge">{{ media_type|title }} · {{ item.original_language|upper }}</div>
+        <h1 style="margin-bottom:8px;color:var(--t)">{{ item.title }}</h1>
+        {% if item.original_title and item.original_title != item.title %}
+        <div style="font-size:14px;color:var(--t3);margin-bottom:6px">{{ item.original_title }}</div>{% endif %}
+        {% if item.tagline %}<div style="font-size:14px;color:var(--t2);font-style:italic;margin-bottom:16px">"{{ item.tagline }}"</div>{% endif %}
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <span style="font-size:18px;font-weight:700;color:var(--gold)">⭐ {{ item.vote_average }} / 10</span>
+          {% if item.release_date %}<span style="color:var(--t2);font-size:14px">{{ item.release_date[:4] }}</span>{% endif %}
+          {% if item.runtime %}<span style="color:var(--t2);font-size:14px">{{ item.runtime }} min</span>{% endif %}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+          {% for g in (item.genres or item.genre_names or []) %}<span class="gbadge" style="font-size:11px;padding:4px 12px">{{ g }}</span>{% endfor %}
+        </div>
+        <p style="font-size:14px;line-height:1.8;color:var(--t2);margin-bottom:20px">{{ item.overview }}</p>
+        {% if item.director %}<div style="font-size:13px;color:var(--t2);margin-bottom:24px">🎬 Directed by <strong style="color:var(--t)">{{ item.director }}</strong></div>{% endif %}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          <button id="wlBtn" class="btn-primary {% if in_watchlist %}wl-in{% endif %}" onclick="doAddWatchlist(this)">
+            {% if in_watchlist %}✓ In Watchlist{% else %}+ Add to Watchlist{% endif %}
+          </button>
+          <button class="btn-ghost" onclick="openRate()">⭐ Rate This</button>
+        </div>
+        {% if user_rating %}
+        <div style="display:flex;gap:3px;align-items:center;font-size:13px;color:var(--t2);margin-top:4px">
+          Your rating: {% for i in range(1,6) %}<span style="font-size:16px;color:{% if i<=user_rating.score %}var(--gold){% else %}var(--sur4){% endif %}">★</span>{% endfor %}
+        </div>{% endif %}
+      </div>
+    </div>
+
+    {% if item.cast %}
+    <div style="padding:40px 0 20px">
+      <h2 style="margin-bottom:20px;color:var(--t)">🎭 Cast</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:14px">
+        {% for a in item.cast %}
+        <div style="text-align:center">
+          {% if a.profile %}<img src="{{ a.profile }}" style="width:68px;height:68px;border-radius:50%;object-fit:cover;margin-bottom:8px;border:2px solid var(--bdr)">
+          {% else %}<div style="width:68px;height:68px;border-radius:50%;background:var(--sur3);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 8px">👤</div>{% endif %}
+          <div style="font-size:11px;font-weight:700;color:var(--t)">{{ a.name }}</div>
+          <div style="font-size:10px;color:var(--t3)">{{ a.character }}</div>
+        </div>{% endfor %}
+      </div>
+    </div>{% endif %}
+
+    {% if item.similar %}
+    <div style="padding:20px 0 40px">
+      <h2 style="margin-bottom:20px;color:var(--t)">🎯 You Might Also Like</h2>
+      <div class="grid">
+        {% for s in item.similar %}
+        <div class="card" onclick="go('{{ media_type }}',{{ s.tmdb_id }})">
+          <div class="card-img">
+            {% if s.poster_path %}<img src="{{ s.poster_path }}" alt="{{ s.title }}" loading="lazy">
+            {% else %}<div class="card-fb">🎬</div>{% endif %}
+            <div class="card-ov"><button class="wl-btn" data-item='{{ s|tojson|e }}' onclick="event.stopPropagation();wlFromBtn(this)">+ Watchlist</button></div>
+          </div>
+          <div class="card-body">
+            <div class="ctitle">{{ s.title }}</div>
+            <div class="cmeta"><span class="crat">⭐{{ s.vote_average }}</span></div>
+          </div>
+        </div>{% endfor %}
+      </div>
+    </div>{% endif %}
+  </div>
+</div>
+
+<!-- Rate Modal -->
+<div id="rateModal" style="display:none;position:fixed;inset:0;background:rgba(43,43,43,0.5);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="background:var(--sur);border-radius:var(--rl);padding:36px;text-align:center;width:340px;box-shadow:var(--sh-lg);border:1.5px solid var(--bdr2)">
+    <h3 style="margin-bottom:6px;color:var(--t);font-size:17px">Rate this</h3>
+    <p style="font-size:13px;color:var(--t2);margin-bottom:22px">"{{ item.title }}"</p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:28px">
+      {% for i in range(1,6) %}<span class="rstar" data-v="{{ i }}" onclick="setRating({{ i }})" style="font-size:40px;cursor:pointer;color:var(--sur4);transition:all 0.15s">★</span>{% endfor %}
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn-primary" onclick="submitRating()">Save Rating</button>
+      <button class="btn-ghost" onclick="closeRate()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Store item data safely in a script tag -->
+<script id="itemData" type="application/json">{{ item|tojson }}</script>
+
+{% else %}
+<div class="container" style="padding:80px 0;text-align:center">
+  <div style="font-size:64px">😕</div><h2 style="color:var(--t)">Not found</h2>
+  <a href="{{ url_for('main.home') }}" class="btn-primary" style="margin-top:20px">Go Home</a>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+// Safely parse item data from JSON script tag — no HTML escaping issues
+const ITEM = JSON.parse(document.getElementById('itemData').textContent);
+const MEDIA = '{{ media_type }}';
+let selRating = 0;
+
+// Add to Watchlist
+async function doAddWatchlist(btn) {
+  const isIn = btn.classList.contains('wl-in');
+  if (isIn) {
+    try {
+      const res = await fetch(`/api/watchlist/${ITEM.tmdb_id}`, { method: 'DELETE' });
+      if (res.ok) {
+        btn.textContent = '+ Add to Watchlist';
+        btn.classList.remove('wl-in');
+        showToast('Removed from watchlist');
+      }
+    } catch(e) { showToast('❌ Error'); }
+  } else {
+    try {
+      // Strip base URL from poster path — store only /path.jpg
+      let poster = ITEM.poster_path || null;
+      if (poster && poster.startsWith('http')) {
+        const match = poster.match(/\/[^\/]+\.[a-z]+$/i);
+        if (match) poster = match[0];
+        else poster = poster.split('/t/p/')[1]?.replace(/^w\d+/, '') || null;
+      }
+      const res = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tmdb_id: ITEM.tmdb_id,
+          media_type: MEDIA,
+          title: ITEM.title,
+          poster_path: poster,
+          genre_ids: ITEM.genre_ids || [],
+          overview: ITEM.overview || '',
+          vote_average: ITEM.vote_average || 0,
+          release_date: ITEM.release_date || '',
+          original_language: ITEM.original_language || ''
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        btn.textContent = '✓ In Watchlist';
+        btn.classList.add('wl-in');
+        showToast('✨ Added to watchlist!');
+      } else {
+        showToast(data.error === 'Already in watchlist' ? '📋 Already in watchlist' : '❌ ' + (data.error || 'Error'));
+      }
+    } catch(e) { showToast('❌ Network error'); }
+  }
+}
+
+// Rate modal
+function openRate() { document.getElementById('rateModal').style.display = 'flex'; }
+function closeRate() { document.getElementById('rateModal').style.display = 'none'; }
+function setRating(v) {
+  selRating = v;
+  document.querySelectorAll('.rstar').forEach(s => s.style.color = +s.dataset.v <= v ? 'var(--gold)' : 'var(--sur4)');
+}
+document.querySelectorAll('.rstar').forEach(s => {
+  s.addEventListener('mouseenter', () => document.querySelectorAll('.rstar').forEach(x => x.style.color = +x.dataset.v <= +s.dataset.v ? 'var(--gold-lt)' : 'var(--sur4)'));
+  s.addEventListener('mouseleave', () => document.querySelectorAll('.rstar').forEach(x => x.style.color = +x.dataset.v <= selRating ? 'var(--gold)' : 'var(--sur4)'));
+});
+async function submitRating() {
+  if (!selRating) { showToast('Pick a rating first'); return; }
+  try {
+    await fetch('/api/rating', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tmdb_id: ITEM.tmdb_id, media_type: MEDIA, title: ITEM.title, genre_ids: ITEM.genre_ids || [], original_language: ITEM.original_language || '', score: selRating })
+    });
+    showToast('⭐ Rated ' + selRating + ' stars!');
+    closeRate();
+  } catch(e) { showToast('❌ Error saving rating'); }
+}
+document.getElementById('rateModal').addEventListener('click', function(e) { if (e.target === this) closeRate(); });
+</script>
+{% endblock %}

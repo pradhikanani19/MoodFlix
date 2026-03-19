@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MoodFlix – Find Your Next Obsession</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span class="nav-logo-icon">🎬</span>
+      <span class="nav-logo-text">MoodFlix</span>
+    </div>
+    <div class="nav-right" style="margin-left:auto;gap:10px">
+      <a href="{{ url_for('auth.login') }}" class="btn-ghost" style="font-size:13px;padding:9px 20px">Login</a>
+      <a href="{{ url_for('auth.signup') }}" class="btn-primary" style="font-size:13px;padding:10px 22px">Get Started →</a>
+    </div>
+  </div>
+</nav>
+<section class="hero">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+  <div class="hero-inner">
+    <div class="hero-badge">🌍 Hollywood · Bollywood · K-Drama · Anime · 1M+ Titles</div>
+    <h1>Find your next<br><span class="gtxt">obsession 🎬</span></h1>
+    <p>AI-powered recommendations based on your exact mood — every country, language, and genre, beautifully curated just for you.</p>
+    <div class="hero-btns">
+      <a href="{{ url_for('auth.signup') }}" class="btn-primary" style="font-size:15px;padding:13px 32px">Start Free →</a>
+      <a href="{{ url_for('auth.login') }}" class="btn-ghost" style="font-size:14px;padding:12px 26px">Login</a>
+    </div>
+    <div class="mood-preview">
+      <span class="mchip">😌 Chill</span><span class="mchip on">💖 Romantic</span>
+      <span class="mchip">😈 Thrilling</span><span class="mchip">🧠 Psychological</span>
+      <span class="mchip">🚀 Sci-Fi</span><span class="mchip">👻 Horror</span>
+    </div>
+  </div>
+</section>
+<section class="features-sec">
+  <div class="container">
+    <h2 class="sec-title">Everything you need to find the perfect watch</h2>
+    <div class="feat-grid">
+      <div class="feat-card"><div class="fi">🎭</div><h3>24 Mood Filters</h3><p>From Chill to Mind-bending — pick your exact vibe for instant perfect matches</p></div>
+      <div class="feat-card"><div class="fi">🌍</div><h3>Global Cinema</h3><p>Hollywood, Bollywood, K-dramas, Anime, Tollywood — all real TMDB data</p></div>
+      <div class="feat-card"><div class="fi">💞</div><h3>Friend Compatibility</h3><p>See your taste match score, shared watchlists, find films you'll both love</p></div>
+      <div class="feat-card"><div class="fi">🎲</div><h3>Surprise Me</h3><p>Can't decide? The AI picks something perfectly suited to your profile</p></div>
+      <div class="feat-card"><div class="fi">📋</div><h3>Smart Watchlist</h3><p>Track, rate and review — your data makes every recommendation better</p></div>
+      <div class="feat-card"><div class="fi">📊</div><h3>Analytics</h3><p>Genre trends, language diversity and rating patterns over time</p></div>
+    </div>
+  </div>
+</section>
+<section style="padding:70px 0;background:var(--bg)">
+  <div class="container" style="text-align:center">
+    <h2 class="sec-title" style="margin-bottom:30px">Every industry, every language</h2>
+    <div class="ind-chips">
+      <div class="ind-chip">🎬 Hollywood</div><div class="ind-chip">🇮🇳 Bollywood</div>
+      <div class="ind-chip">🎌 Anime</div><div class="ind-chip">🇰🇷 K-Dramas</div>
+      <div class="ind-chip">🌶️ Tollywood</div><div class="ind-chip">🥐 French Cinema</div>
+      <div class="ind-chip">🌮 Spanish Films</div><div class="ind-chip">🌏 World Cinema</div>
+    </div>
+  </div>
+</section>
+<section style="padding:70px 0;background:var(--bg2)">
+  <div class="container">
+    <div class="cta-box">
+      <h2>Ready to find your next <span class="gtxt">obsession?</span></h2>
+      <p>Free forever. No credit card needed. Just great movies.</p>
+      <a href="{{ url_for('auth.signup') }}" class="btn-primary" style="font-size:15px;padding:13px 32px">Get Started →</a>
+    </div>
+  </div>
+</section>
+<footer style="padding:26px 0;text-align:center;background:var(--bg);border-top:1.5px solid var(--bdr2)">
+  <div style="font-family:'Poppins',sans-serif;font-size:18px;font-weight:800;margin-bottom:6px" class="gtxt">🎬 MoodFlix</div>
+  <p style="color:var(--t3);font-size:12px;font-weight:500">Powered by TMDB API · Made with ❤️</p>
+</footer>
+</body>
+</html>

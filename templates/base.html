@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}MoodFlix{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="{{ url_for('main.home') }}" class="nav-logo">
+      <span class="nav-logo-icon">🎬</span>
+      <span class="nav-logo-text">MoodFlix</span>
+    </a>
+    <div class="nav-links">
+      <a href="{{ url_for('main.home') }}" class="nav-link {% if request.endpoint=='main.home' %}active{% endif %}">Home</a>
+      <a href="{{ url_for('main.discover') }}" class="nav-link {% if request.endpoint=='main.discover' %}active{% endif %}">Discover</a>
+      <a href="{{ url_for('main.watchlist') }}" class="nav-link {% if request.endpoint=='main.watchlist' %}active{% endif %}">Watchlist</a>
+      <a href="{{ url_for('main.friends') }}" class="nav-link {% if request.endpoint=='main.friends' %}active{% endif %}">Friends</a>
+      <a href="{{ url_for('main.dashboard') }}" class="nav-link {% if request.endpoint=='main.dashboard' %}active{% endif %}">Dashboard</a>
+    </div>
+    <div class="nav-right">
+      <div class="nav-search-wrap">
+        <input type="text" id="globalSearch" placeholder="🔍 Search anything..." autocomplete="off">
+        <div class="search-dropdown" id="searchDropdown"></div>
+      </div>
+      <button class="btn-surprise" onclick="surpriseMe()">🎲 Surprise Me</button>
+      <div class="nav-avatar" style="background:{{ current_user.avatar_color }}">{{ current_user.username[0].upper() }}</div>
+      <a href="{{ url_for('auth.logout') }}" class="nav-link" style="font-size:12px">Logout</a>
+    </div>
+  </div>
+</nav>
+<div id="toasts"></div>
+<main>{% block content %}{% endblock %}</main>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

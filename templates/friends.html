@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Friends – MoodFlix{% endblock %}
+{% block content %}
+<div class="page container">
+  <div class="page-hdr">
+    <h1>Friends <span class="gtxt">& Compatibility</span></h1>
+    <p>See who shares your taste, build shared watchlists, and find films you'll both love</p>
+  </div>
+  <div class="friends-layout">
+    <div class="friends-sidebar">
+      <div class="card-block">
+        <h3>Add a Friend</h3>
+        <div style="display:flex;gap:9px;align-items:stretch">
+          <input type="text" id="fuInput" placeholder="Enter username..."
+            style="flex:1;min-width:0;background:var(--sur2);border:1.5px solid var(--bdr2);border-radius:var(--r);padding:10px 15px;font-size:13px;color:var(--t);outline:none;font-family:inherit;transition:all 0.2s"
+            onfocus="this.style.borderColor='var(--accent-bdr)';this.style.boxShadow='0 0 0 3px rgba(255,183,165,0.12)'"
+            onblur="this.style.borderColor='var(--bdr2)';this.style.boxShadow='none'"
+            onkeydown="if(event.key==='Enter')addFriend()">
+          <button onclick="addFriend()"
+            style="flex-shrink:0;background:var(--grad);color:#fff;border:none;border-radius:var(--r);padding:0 22px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;white-space:nowrap;box-shadow:var(--sh);transition:all 0.2s"
+            onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='var(--sh-md)'"
+            onmouseout="this.style.transform='none';this.style.boxShadow='var(--sh)'">
+            Add
+          </button>
+        </div>
+        <div id="fuMsg" style="display:none;margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500"></div>
+      </div>
+      <div class="card-block">
+        <h3>Your Friends</h3>
+        {% if friends %}
+        <div id="friendsList">
+          {% for f in friends %}
+          <div class="friend-row" id="fr-{{ f.id }}" onclick="selectFriend({{ f.id }},'{{ f.username }}','{{ f.avatar_color }}')">
+            <div class="favatar" style="background:{{ f.avatar_color }}">{{ f.username[0].upper() }}</div>
+            <div style="flex:1;min-width:0">
+              <div class="fr-name">{{ f.username }}</div>
+              <div class="fr-compat" id="fc-{{ f.id }}">Loading...</div>
+            </div>
+            <div style="color:var(--t3);font-size:18px;line-height:1">›</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align:center;padding:32px 0;color:var(--t3)">
+          <div style="font-size:36px;margin-bottom:10px">👥</div>
+          <p style="font-size:13px">No friends yet. Add someone above!</p>
+        </div>
+        {% endif %}
+      </div>
+      {% if shared_lists %}
+      <div class="card-block">
+        <h3>Shared Lists</h3>
+        {% for sl in shared_lists %}
+        <div style="padding:12px 14px;background:var(--sur2);border-radius:var(--rs);margin-bottom:9px;border:1.5px solid var(--bdr2)">
+          <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px;color:var(--t);margin-bottom:3px">{{ sl.name }}</div>
+          <div style="font-size:11px;color:var(--t3);font-weight:500">{{ sl.items|length }} items</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="friend-panel" id="friendPanel">
+      <div class="fp-empty">
+        <div style="font-size:52px;margin-bottom:14px">💞</div>
+        <h3 style="color:var(--t2);font-size:20px;margin-bottom:8px">Select a friend</h3>
+        <p style="font-size:14px;max-width:250px;line-height:1.7">Click on a friend to see your compatibility score and discover films you'll both enjoy</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(async()=>{
+  try{
+    const data=await(await fetch('/api/friends')).json();
+    data.forEach(f=>{
+      const el=document.getElementById('fc-'+f.id);
+      if(!el)return;
+      const sc=f.compatibility;
+      const col=sc>=70?'#E8956A':sc>=40?'#D4705A':'var(--t3)';
+      el.innerHTML=`<span style="color:${col};font-weight:600">${sc}%</span> <span style="color:var(--t3)">match</span>`;
+    });
+  }catch(e){}
+})();
+
+async function addFriend(){
+  const input=document.getElementById('fuInput');
+  const username=input.value.trim();
+  const msg=document.getElementById('fuMsg');
+  if(!username)return;
+  try{
+    const res=await fetch('/api/friends/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+    const data=await res.json();
+    if(data.success){
+      msg.style.cssText='display:block;background:rgba(255,183,165,0.15);color:var(--peach-deep);border:1.5px solid var(--accent-bdr);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500';
+      msg.textContent='✓ Added '+username+' successfully';
+      input.value='';
+      setTimeout(()=>location.reload(),1200);
+    }else{
+      msg.style.cssText='display:block;background:var(--sur2);color:var(--t2);border:1.5px solid var(--bdr2);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs);font-weight:500';
+      msg.textContent=data.error||'User not found';
+    }
+  }catch(e){
+    msg.style.cssText='display:block;background:var(--sur2);color:var(--t2);border:1.5px solid var(--bdr2);margin-top:10px;font-size:12px;padding:9px 13px;border-radius:var(--rs)';
+    msg.textContent='Something went wrong';
+  }
+}
+
+async function selectFriend(fid,fname,fcolor){
+  document.querySelectorAll('.friend-row').forEach(r=>r.classList.remove('active-fr'));
+  const row=document.getElementById('fr-'+fid);
+  if(row)row.classList.add('active-fr');
+  const panel=document.getElementById('friendPanel');
+  panel.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:320px"><div class="spin"></div></div>';
+  try{
+    const [cd,fd]=await Promise.all([
+      fetch(`/api/friends/${fid}/compatibility`).then(r=>r.json()),
+      fetch(`/api/friends/${fid}/for-us`).then(r=>r.json())
+    ]);
+    const sc=cd.score;
+    const desc=sc>=80?'Amazing taste match! 🎉':sc>=60?'Great compatibility 👍':sc>=40?'Some common ground 😊':'Very different tastes 🤷';
+    panel.innerHTML=`
+      <div class="fp-header">
+        <div class="fp-avatar-lg" style="background:${fcolor}">${fname[0].toUpperCase()}</div>
+        <div class="fp-user"><h3>${fname}</h3><p>@${fname}</p></div>
+        <div class="compat-pill">
+          <div class="compat-num">${sc}%</div>
+          <div class="compat-lbl">Match Score</div>
+          <div class="compat-bar-wrap"><div class="compat-bar" style="width:${sc}%"></div></div>
+          <div style="font-size:11px;color:var(--t3);margin-top:6px;font-weight:500">${desc}</div>
+        </div>
+      </div>
+      <div class="fp-tabs">
+        <button class="fp-tab active" onclick="fpTab(this,'for-us')">🎯 Find For Us</button>
+        <button class="fp-tab" onclick="fpTab(this,'shared-wl')">📝 Shared Watchlist</button>
+      </div>
+      <div id="fp-for-us" class="fp-content">
+        <p style="font-size:13px;color:var(--t3);margin-bottom:18px;font-weight:500">Films neither of you has seen, curated from your combined taste</p>
+        <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(142px,1fr))">
+          ${fd.length?fd.map(item=>cardHTML(item)).join(''):'<div class="empty-state" style="grid-column:1/-1;padding:48px 0"><p>Rate more movies to unlock shared recommendations</p></div>'}
+        </div>
+      </div>
+      <div id="fp-shared-wl" class="fp-content" style="display:none">
+        <div style="margin-bottom:20px">
+          <button class="btn-primary" onclick="createShared(${fid},'${fname}')">+ Create Shared Watchlist</button>
+        </div>
+        <div style="background:var(--sur2);border-radius:var(--r);padding:18px;border:1.5px solid var(--bdr2)">
+          <p style="font-size:13px;color:var(--t3);line-height:1.7">No shared watchlists yet.<br>Create one to start watching together!</p>
+        </div>
+      </div>`;
+  }catch(e){panel.innerHTML='<div class="fp-empty"><p>Failed to load. Please try again.</p></div>';}
+}
+
+function fpTab(btn,name){
+  document.querySelectorAll('.fp-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('fp-for-us').style.display=name==='for-us'?'block':'none';
+  document.getElementById('fp-shared-wl').style.display=name==='shared-wl'?'block':'none';
+}
+
+async function createShared(fid,fname){
+  const name=prompt(`Name for your shared watchlist with ${fname}:`,`Movies with ${fname}`);
+  if(!name)return;
+  try{
+    await fetch('/api/shared-watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({friend_id:fid,name})});
+    showToast('✅ Shared watchlist created!');
+    setTimeout(()=>location.reload(),1000);
+  }catch(e){showToast('❌ Error creating list');}
+}
+</script>
+{% endblock %}

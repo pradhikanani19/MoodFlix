@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Home – MoodFlix{% endblock %}
+{% block content %}
+<div class="page">
+  <section class="mood-hero">
+    <div class="blob b1"></div><div class="blob b2"></div>
+    <div class="mh-inner">
+      <div class="eyebrow">✨ Personalized for you</div>
+      <h1>How are you feeling <span class="gtxt">today?</span></h1>
+      <p>Pick your mood and we'll find the perfect watch from 1M+ titles worldwide</p>
+    </div>
+  </section>
+  <section class="mood-section">
+    <div class="container">
+      <div class="mood-grid" id="moodGrid"></div>
+      <div class="mood-actions">
+        <div class="toggle-group">
+          <button class="tgbtn active" onclick="setMT(this,'movie')">🎬 Movies</button>
+          <button class="tgbtn" onclick="setMT(this,'tv')">📺 Series</button>
+        </div>
+        <select id="industryPick" class="sel">
+          <option value="all">🌍 All Industries</option>
+          <option value="hollywood">🎬 Hollywood</option>
+          <option value="bollywood">🇮🇳 Bollywood</option>
+          <option value="korean">🇰🇷 Korean</option>
+          <option value="japanese">🎌 Japanese / Anime</option>
+          <option value="tollywood">🌶️ Tollywood</option>
+          <option value="french">🥐 French</option>
+          <option value="spanish">🌮 Spanish</option>
+        </select>
+        <button class="btn-primary" onclick="findMovies()">Find Matches →</button>
+        <button class="btn-ghost" onclick="clearMoods()">Clear All</button>
+      </div>
+    </div>
+  </section>
+  <div id="moodRecsWrap" style="display:none">
+    <div class="row-hdr container" style="padding-left:0;padding-right:0;margin-top:44px">
+      <h2>🎯 Based on your mood</h2>
+      <button class="see-all" onclick="loadMoreMood()" id="btnMoreMood">Load more →</button>
+    </div>
+    <div class="row-scroll" id="moodRecs"></div>
+  </div>
+  <div class="row-section">
+    <div class="row-hdr container" style="padding-left:0;padding-right:0">
+      <h2>🔥 Trending This Week</h2>
+      <a href="{{ url_for('main.discover') }}" class="see-all">See all →</a>
+    </div>
+    <div class="row-scroll">
+      {% for item in trending %}
+      <div class="card" onclick="go('{{ item.media_type }}',{{ item.tmdb_id }})">
+        <div class="card-img">
+          {% if item.poster_path %}<img src="{{ item.poster_path }}" alt="{{ item.title }}" loading="lazy">
+          {% else %}<div class="card-fb">🎬</div>{% endif %}
+          <div class="card-ov"><button class="wl-btn" data-item='{{ item|tojson|e }}' onclick="event.stopPropagation();wlFromBtn(this)">+ Watchlist</button></div>
+        </div>
+        <div class="card-body">
+          <div class="ctitle">{{ item.title }}</div>
+          <div class="cmeta"><span class="crat">⭐ {{ item.vote_average }}</span><span class="clang">{{ item.original_language|upper }}</span></div>
+          <div class="cgenres">{% for g in item.genre_names[:2] %}<span class="gbadge">{{ g }}</span>{% endfor %}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="row-section">
+    <div class="row-hdr container" style="padding-left:0;padding-right:0"><h2>🍿 Now in Cinemas</h2></div>
+    <div class="row-scroll">
+      {% for item in now_playing %}
+      <div class="card" onclick="go('movie',{{ item.tmdb_id }})">
+        <div class="card-img">
+          {% if item.poster_path %}<img src="{{ item.poster_path }}" alt="{{ item.title }}" loading="lazy">
+          {% else %}<div class="card-fb">🎬</div>{% endif %}
+          <div class="card-ov"><button class="wl-btn" data-item='{{ item|tojson|e }}' onclick="event.stopPropagation();wlFromBtn(this)">+ Watchlist</button></div>
+        </div>
+        <div class="card-body">
+          <div class="ctitle">{{ item.title }}</div>
+          <div class="cmeta"><span class="crat">⭐ {{ item.vote_average }}</span><span class="clang">{{ item.original_language|upper }}</span></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const MOODS=[{id:'chill',l:'Chill',e:'😌'},{id:'emotional',l:'Emotional',e:'😭'},{id:'romantic',l:'Romantic',e:'💖'},{id:'thrilling',l:'Thrilling',e:'😈'},{id:'fun',l:'Fun',e:'😂'},{id:'motivational',l:'Motivational',e:'💪'},{id:'romcom',l:'RomCom',e:'💕'},{id:'comedy',l:'Comedy',e:'🤣'},{id:'dark-comedy',l:'Dark Comedy',e:'😏'},{id:'horror',l:'Horror',e:'👻'},{id:'horror-comedy',l:'Horror Comedy',e:'💀'},{id:'psychological',l:'Psychological',e:'🧠'},{id:'crime',l:'Crime',e:'🔪'},{id:'mystery',l:'Mystery',e:'🕵️'},{id:'action',l:'Action',e:'🔥'},{id:'adventure',l:'Adventure',e:'🌍'},{id:'fantasy',l:'Fantasy',e:'🧙'},{id:'sci-fi',l:'Sci-Fi',e:'🚀'},{id:'feel-good',l:'Feel-Good',e:'☀️'},{id:'slice-of-life',l:'Slice of Life',e:'🌿'},{id:'sad',l:'Sad',e:'💔'},{id:'inspiring',l:'Inspiring',e:'🌟'},{id:'mind-bending',l:'Mind-bending',e:'🤯'},{id:'suspense',l:'Suspense',e:'😬'}];
+let mediaType='movie',moodPage=1;
+document.getElementById('moodGrid').innerHTML=MOODS.map(m=>`<button class="mchip" data-id="${m.id}" onclick="this.classList.toggle('on')">${m.e} ${m.l}</button>`).join('');
+function setMT(btn,type){document.querySelectorAll('.toggle-group .tgbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');mediaType=type;}
+function getSelectedMoods(){return[...document.querySelectorAll('#moodGrid .mchip.on')].map(b=>b.dataset.id);}
+async function findMovies(){moodPage=1;document.getElementById('moodRecsWrap').style.display='block';await loadMoodRecs(false);document.getElementById('moodRecsWrap').scrollIntoView({behavior:'smooth'});}
+async function loadMoreMood(){moodPage++;await loadMoodRecs(true);}
+async function loadMoodRecs(append){
+  const grid=document.getElementById('moodRecs');
+  if(!append)grid.innerHTML='<div class="spin" style="margin:40px auto"></div>';
+  const moods=getSelectedMoods();
+  const p=new URLSearchParams();
+  moods.forEach(m=>p.append('mood',m));
+  p.set('industry',document.getElementById('industryPick').value);
+  p.set('media_type',mediaType);p.set('page',moodPage);
+  try{
+    const data=await(await fetch('/api/recommend/mood?'+p)).json();
+    if(!append)grid.innerHTML='';
+    if(!data.length&&!append){grid.innerHTML='<div class="empty-state" style="padding:40px 0"><p>No results. Try different moods!</p></div>';return;}
+    data.forEach(item=>{const d=document.createElement('div');d.innerHTML=cardHTML(item);grid.appendChild(d.firstElementChild);});
+  }catch(e){grid.innerHTML='<div class="empty-state" style="padding:40px 0"><p>Set your TMDB API key in .env to get recommendations</p></div>';}
+}
+function clearMoods(){document.querySelectorAll('#moodGrid .mchip').forEach(c=>c.classList.remove('on'));document.getElementById('moodRecsWrap').style.display='none';moodPage=1;}
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – MoodFlix{% endblock %}
+{% block head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<div class="page container">
+  <div class="page-hdr"><h1>My Dashboard 📊</h1><p>Your watching analytics & insights</p></div>
+  <div class="stats-row">
+    <div class="scard"><div class="si">🎬</div><div class="sv" id="sv1">–</div><div class="sl">Watched</div></div>
+    <div class="scard"><div class="si">⭐</div><div class="sv" id="sv2">–</div><div class="sl">Avg Rating</div></div>
+    <div class="scard"><div class="si">🎭</div><div class="sv" id="sv3">–</div><div class="sl">Top Genre</div></div>
+    <div class="scard"><div class="si">🌍</div><div class="sv" id="sv4">–</div><div class="sl">Languages</div></div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-card"><h3>🎭 Top Genres</h3><div style="height:220px"><canvas id="cGenre"></canvas></div></div>
+    <div class="chart-card"><h3>⭐ Rating Distribution</h3><div style="height:220px"><canvas id="cRating"></canvas></div></div>
+    <div class="chart-card"><h3>🌍 Language Diversity</h3><div style="height:220px"><canvas id="cLang"></canvas></div></div>
+    <div class="chart-card"><h3>📅 Monthly Watches</h3><div style="height:220px"><canvas id="cMonthly"></canvas></div></div>
+  </div>
+  {% if ratings %}
+  <h2 style="margin-bottom:16px">⭐ Recently Rated</h2>
+  <div>{% for r in ratings[:10] %}
+  <div style="background:#fff;border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:center;border:1.5px solid #ede9fe;margin-bottom:10px">
+    <div style="flex:1;font-weight:700;font-size:14px">{{ r.title }}</div>
+    <div style="font-size:11px;color:#9ca3af;min-width:80px">{{ r.media_type|title }} · {{ r.original_language|upper }}</div>
+    <div>{% for i in range(1,6) %}<span style="font-size:16px;color:{% if i<=r.score %}#f59e0b{% else %}#e5e7eb{% endif %}">★</span>{% endfor %}</div>
+    <div style="font-size:11px;color:#9ca3af">{{ r.rated_at.strftime('%b %d, %Y') }}</div>
+  </div>{% endfor %}</div>
+  {% else %}
+  <div class="empty-state"><div style="font-size:48px">⭐</div><p>Rate movies to see your analytics here</p></div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+Chart.defaults.font.family='Poppins';
+const C=['#FFB7A5','#FFDCCC','#E8956A','#FDE2E4','#D4705A','#FF8E78','#F5C4AE','#FFB0A0'];
+(async()=>{
+  try{
+    const d=await(await fetch('/api/analytics')).json();
+    document.getElementById('sv1').textContent=d.total_watched;
+    document.getElementById('sv2').textContent=d.avg_rating||'–';
+    document.getElementById('sv3').textContent=d.top_genres[0]?.[0]||'–';
+    document.getElementById('sv4').textContent=d.language_diversity.length;
+    if(d.top_genres.length){
+      new Chart(document.getElementById('cGenre'),{type:'bar',data:{labels:d.top_genres.map(g=>g[0]),datasets:[{data:d.top_genres.map(g=>g[1]),backgroundColor:C,borderRadius:8,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{display:false}}}}});
+    }
+    new Chart(document.getElementById('cRating'),{type:'doughnut',data:{labels:['1★','2★','3★','4★','5★'],datasets:[{data:[1,2,3,4,5].map(s=>d.rating_distribution[s]||0),backgroundColor:['#fee2e2','#fed7aa','#fef3c7','#d1fae5','#f59e0b'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+    const langNames={en:'English',hi:'Hindi',ko:'Korean',ja:'Japanese',te:'Telugu',ta:'Tamil',fr:'French',es:'Spanish'};
+    new Chart(document.getElementById('cLang'),{type:'pie',data:{labels:d.language_diversity.map(l=>langNames[l[0]]||l[0].toUpperCase()),datasets:[{data:d.language_diversity.map(l=>l[1]),backgroundColor:C,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+    new Chart(document.getElementById('cMonthly'),{type:'line',data:{labels:d.monthly_watches.map(m=>m[0]),datasets:[{label:'Watched',data:d.monthly_watches.map(m=>m[1]),borderColor:'#FFB7A5',backgroundColor:'rgba(255,183,165,0.12)',borderWidth:2.5,fill:true,tension:0.4,pointRadius:4,pointBackgroundColor:'#FFB7A5'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'#f3f4f6'},beginAtZero:true}}}});
+  }catch(e){console.error(e);}
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Watchlist – MoodFlix{% endblock %}
+{% block content %}
+<div class="page container">
+  <div class="page-hdr" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+    <div><h1>My Watchlist</h1><p>Track, rate, and review everything you watch</p></div>
+    <div style="display:flex;gap:20px">
+      <div class="wstat"><span>{{ unwatched|length }}</span><label>To Watch</label></div>
+      <div class="wstat"><span>{{ watched|length }}</span><label>Watched</label></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('unwatched',this)">⏳ To Watch ({{ unwatched|length }})</button>
+    <button class="tab" onclick="switchTab('watched',this)">✅ Watched ({{ watched|length }})</button>
+  </div>
+
+  <!-- TO WATCH -->
+  <div id="tab-unwatched">
+    {% if unwatched %}
+    {% for item in unwatched %}
+    <div class="wl-row" id="wli-{{ item.tmdb_id }}">
+      <div class="wl-poster">
+        {% if item.poster_path %}<img src="https://image.tmdb.org/t/p/w185{{ item.poster_path }}" alt="{{ item.title }}">
+        {% else %}<div class="wl-pfb">🎬</div>{% endif %}
+      </div>
+      <div class="wl-info">
+        <div class="wl-title">{{ item.title }}</div>
+        <div class="wl-meta">{{ item.release_date[:4] if item.release_date else '—' }} · {{ item.original_language|upper }} · {{ item.media_type|title }}</div>
+        <div class="wl-overview">{{ item.overview[:120] }}{% if item.overview|length > 120 %}…{% endif %}</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-size:12px;color:var(--gold);font-weight:700">⭐ {{ item.vote_average }}</span>
+        </div>
+        <!-- RATING WIDGET -->
+        <div class="rate-widget">
+          <div class="rate-widget-label">Your Rating</div>
+          <div class="rate-stars-row">
+            <div class="stars"
+              data-id="{{ item.tmdb_id }}"
+              data-type="{{ item.media_type }}"
+              data-title="{{ item.title|e }}"
+              data-genres="{{ item.genre_ids or '' }}"
+              data-lang="{{ item.original_language or '' }}">
+              {% for i in range(1,6) %}<span class="star" data-v="{{ i }}">★</span>{% endfor %}
+            </div>
+            <span class="rate-saved" id="rs-{{ item.tmdb_id }}">Saved ✓</span>
+          </div>
+        </div>
+        <textarea class="wl-rev" placeholder="Add a short review..." data-id="{{ item.tmdb_id }}">{{ item.review or '' }}</textarea>
+      </div>
+      <div class="wl-acts">
+        <button class="btn-watched" onclick="markWatched({{ item.tmdb_id }})">✓ Watched</button>
+        <button class="btn-rm" onclick="removeFromWatchlist({{ item.tmdb_id }})">Remove</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+      <div style="font-size:56px;margin-bottom:14px">🎬</div>
+      <h3>Nothing here yet</h3>
+      <p style="margin-bottom:20px">Start adding movies & series to track them</p>
+      <a href="{{ url_for('main.discover') }}" class="btn-primary">Discover Content →</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- WATCHED -->
+  <div id="tab-watched" style="display:none">
+    {% if watched %}
+    {% for item in watched %}
+    <div class="wl-row">
+      <div class="wl-poster">
+        {% if item.poster_path %}<img src="https://image.tmdb.org/t/p/w185{{ item.poster_path }}" alt="{{ item.title }}">
+        {% else %}<div class="wl-pfb">✅</div>{% endif %}
+      </div>
+      <div class="wl-info">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <div class="wl-title" style="margin-bottom:0">{{ item.title }}</div>
+          <span class="wbadge">Watched ✓</span>
+        </div>
+        <div class="wl-meta">{{ item.release_date[:4] if item.release_date else '—' }} · {{ item.original_language|upper }} · {{ item.media_type|title }}</div>
+        <!-- RATING WIDGET -->
+        <div class="rate-widget">
+          <div class="rate-widget-label">Your Rating</div>
+          <div class="rate-stars-row">
+            <div class="stars" data-id="{{ item.tmdb_id }}" data-type="{{ item.media_type }}" data-title="{{ item.title|e }}">
+              {% for i in range(1,6) %}<span class="star" data-v="{{ i }}">★</span>{% endfor %}
+            </div>
+            <span class="rate-saved" id="rs-{{ item.tmdb_id }}">Saved ✓</span>
+          </div>
+        </div>
+        {% if item.review %}<div style="font-size:12px;color:var(--t2);font-style:italic;margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:var(--rs);border-left:2px solid var(--gold)">"{{ item.review }}"</div>{% endif %}
+      </div>
+      <div class="wl-acts">
+        <button class="btn-rm" onclick="removeFromWatchlist({{ item.tmdb_id }})">Remove</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state"><div style="font-size:56px;margin-bottom:14px">✅</div><h3>Nothing watched yet</h3><p>Mark items as watched to track your history</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function switchTab(name,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
+  ['unwatched','watched'].forEach(t=>document.getElementById('tab-'+t).style.display=t===name?'block':'none');
+}
+
+// Load existing ratings and apply to stars
+async function loadRatings(){
+  try{
+    const ratings=await(await fetch('/api/ratings')).json();
+    ratings.forEach(r=>{
+      const container=document.querySelector(`.stars[data-id="${r.tmdb_id}"]`);
+      if(container){
+        container.dataset.cur=r.score;
+        container.querySelectorAll('.star').forEach(s=>s.classList.toggle('on',+s.dataset.v<=r.score));
+      }
+    });
+  }catch(e){}
+}
+
+// Star rating interactions
+document.querySelectorAll('.stars').forEach(container=>{
+  const stars=container.querySelectorAll('.star');
+  const id=container.dataset.id;
+  const type=container.dataset.type;
+  const title=container.dataset.title;
+
+  stars.forEach(s=>{
+    s.addEventListener('mouseenter',()=>stars.forEach(x=>x.classList.toggle('on',+x.dataset.v<=+s.dataset.v)));
+    s.addEventListener('mouseleave',()=>stars.forEach(x=>x.classList.toggle('on',+x.dataset.v<=(+container.dataset.cur||0))));
+    s.addEventListener('click',async()=>{
+      const v=+s.dataset.v;
+      container.dataset.cur=v;
+      stars.forEach(x=>x.classList.toggle('on',+x.dataset.v<=v));
+      try{
+        // Parse genre_ids from data attribute on the container
+        const rawGenres = container.dataset.genres || '';
+        const genreIds = rawGenres.split(',').filter(g=>g.trim()).map(g=>parseInt(g.trim())).filter(n=>!isNaN(n));
+        const lang = container.dataset.lang || '';
+        await fetch('/api/rating',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({tmdb_id:+id,media_type:type,title:title,score:v,genre_ids:genreIds,original_language:lang})});
+        const saved=document.getElementById('rs-'+id);
+        if(saved){saved.classList.add('show');setTimeout(()=>saved.classList.remove('show'),2000);}
+        showToast('⭐ Rated '+v+' star'+(v>1?'s':''));
+      }catch(e){showToast('❌ Error saving rating');}
+    });
+  });
+});
+
+// Auto-save review
+document.querySelectorAll('.wl-rev').forEach(ta=>{
+  ta.addEventListener('blur',async()=>{
+    try{await fetch(`/api/watchlist/${ta.dataset.id}/watched`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({watched:false,review:ta.value})});}
+    catch(e){}
+  });
+});
+
+loadRatings();
+</script>
+{% endblock %}
