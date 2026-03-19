@@ -6,7 +6,7 @@ requests
 numpy
 scikit-learn
 pandas
-plotlyFlask
+
 Flask-SQLAlchemy
 Flask-Login
 Flask-Bcrypt
