@@ -1,5 +1,6 @@
 import requests
 import random
+import math
 import numpy as np
 
 TMDB_GENRE_NAMES = {
@@ -221,7 +222,6 @@ class TMDBClient:
 
     # ── FOR US — Smart joint recommendation engine ────────────────────────────
     def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=50, year_from=None, year_to=None):
-        import math
         from collections import Counter
 
         # ── 1. Build taste profiles ───────────────────────────────────────────
