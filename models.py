@@ -8,10 +8,33 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+# Confirmed friendships (both accepted)
 friendships = db.Table('friendships',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('friend_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
 )
+
+
+class FriendRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending, accepted, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_requests')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_requests')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'sender_id': self.sender_id,
+            'receiver_id': self.receiver_id,
+            'sender_username': self.sender.username if self.sender else '',
+            'sender_avatar_color': self.sender.avatar_color if self.sender else '#FFB7A5',
+            'status': self.status,
+            'created_at': self.created_at.isoformat()
+        }
 
 
 class User(db.Model, UserMixin):
@@ -19,7 +42,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    avatar_color = db.Column(db.String(20), default='#667eea')
+    avatar_color = db.Column(db.String(20), default='#FFB7A5')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     watchlist = db.relationship('WatchlistItem', backref='user', lazy=True, cascade='all, delete-orphan')

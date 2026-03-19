@@ -230,31 +230,89 @@ class TMDBClient:
             return random.choice(results[:10]), mood
         return None, mood
 
-    def for_us(self, user1_ratings, user2_ratings, media_type='movie'):
-        genre_counts = {}
+    def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=20):
+        """Find movies both users will enjoy — returns up to count results."""
+        from collections import Counter
+        genre_counts = Counter()
         for r in user1_ratings + user2_ratings:
             for gid in (r.get('genre_ids') or '').split(','):
                 gid = gid.strip()
                 if gid and gid.isdigit():
-                    genre_counts[int(gid)] = genre_counts.get(int(gid), 0) + r.get('score', 3)
+                    genre_counts[int(gid)] += r.get('score', 3)
         top = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:3]
         genre_ids = [g[0] for g in top] if top else [35, 28, 18]
-        results = self.discover(media_type, genre_ids=genre_ids, sort_by='vote_average.desc')
         watched = {r['tmdb_id'] for r in user1_ratings} | {r['tmdb_id'] for r in user2_ratings}
-        return [r for r in results if r['tmdb_id'] not in watched][:8]
+        all_results = []
+        seen = set()
+        # Fetch multiple pages for more variety
+        for page in range(1, 5):
+            page_results = self.discover(media_type, genre_ids=genre_ids,
+                                         sort_by='vote_average.desc', page=page)
+            for r in page_results:
+                if r['tmdb_id'] not in watched and r['tmdb_id'] not in seen:
+                    all_results.append(r)
+                    seen.add(r['tmdb_id'])
+            if len(all_results) >= count:
+                break
+        # Also try with OR logic for more results if needed
+        if len(all_results) < count // 2:
+            extra = self.discover(media_type, genre_ids=genre_ids[:1],
+                                  sort_by='popularity.desc', page=1, genre_logic='OR')
+            for r in extra:
+                if r['tmdb_id'] not in watched and r['tmdb_id'] not in seen:
+                    all_results.append(r)
+                    seen.add(r['tmdb_id'])
+        all_results.sort(key=lambda x: x.get('vote_average', 0), reverse=True)
+        return all_results[:count]
 
-    def compatibility(self, u1_ratings, u2_ratings, u1_watched, u2_watched):
+    def compatibility(self, u1_ratings, u2_ratings, u1_watched, u2_watched,
+                      u1_genres=None, u2_genres=None):
+        """Improved compatibility score 0-100."""
+        from collections import Counter
+        # 1. Watch overlap
         w1, w2 = set(u1_watched), set(u2_watched)
         watch_overlap = len(w1 & w2) / max(len(w1 | w2), 1) if (w1 or w2) else 0
-        u1 = {r['tmdb_id']: r['score'] for r in u1_ratings}
-        u2 = {r['tmdb_id']: r['score'] for r in u2_ratings}
-        common = set(u1.keys()) & set(u2.keys())
+
+        # 2. Rating cosine similarity on commonly rated items
+        u1r = {r['tmdb_id']: r['score'] for r in u1_ratings}
+        u2r = {r['tmdb_id']: r['score'] for r in u2_ratings}
+        common = set(u1r.keys()) & set(u2r.keys())
         if len(common) >= 2:
-            a = np.array([u1[k] for k in common], dtype=float)
-            b = np.array([u2[k] for k in common], dtype=float)
+            a = np.array([u1r[k] for k in common], dtype=float)
+            b = np.array([u2r[k] for k in common], dtype=float)
             norm_a, norm_b = np.linalg.norm(a), np.linalg.norm(b)
-            rating_sim = float(np.dot(a, b) / (norm_a * norm_b)) if norm_a and norm_b else 0.5
+            cosine = float(np.dot(a, b) / (norm_a * norm_b)) if norm_a and norm_b else 0.5
+            # Rating agreement: penalise large differences
+            avg_diff = sum(abs(u1r[k] - u2r[k]) for k in common) / len(common)
+            agreement = max(0.0, 1.0 - avg_diff / 4.0)
+            rating_sim = (cosine * 0.6 + agreement * 0.4)
+        elif len(common) == 1:
+            diff = abs(u1r[list(common)[0]] - u2r[list(common)[0]])
+            rating_sim = max(0.3, 1.0 - diff / 4.0)
         else:
-            rating_sim = 0.5
-        score = watch_overlap * 0.4 + rating_sim * 0.6
+            rating_sim = 0.35
+
+        # 3. Genre taste overlap using Jaccard on top genres
+        if u1_genres and u2_genres:
+            g1 = Counter(u1_genres)
+            g2 = Counter(u2_genres)
+            all_g = set(g1.keys()) | set(g2.keys())
+            if all_g:
+                overlap = sum(min(g1.get(g, 0), g2.get(g, 0)) for g in all_g)
+                total = sum(max(g1.get(g, 0), g2.get(g, 0)) for g in all_g)
+                genre_sim = overlap / total if total else 0.5
+            else:
+                genre_sim = 0.5
+        else:
+            genre_sim = 0.5
+
+        # Weighted: rating similarity most important
+        score = rating_sim * 0.50 + genre_sim * 0.30 + watch_overlap * 0.20
+
+        # Bonus for meaningful shared watching history
+        if len(w1 & w2) >= 3:
+            score = min(score + 0.04, 1.0)
+        if len(w1 & w2) >= 8:
+            score = min(score + 0.04, 1.0)
+
         return min(round(score * 100), 100)

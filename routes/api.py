@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required, current_user
 from extensions import db
-from models import User, WatchlistItem, Rating, SharedWatchlist, SharedWatchlistItem
+from models import User, WatchlistItem, Rating, SharedWatchlist, SharedWatchlistItem, FriendRequest
 from services import TMDBClient, MOOD_GENRE_MAP, INDUSTRY_LANGUAGE_MAP, TMDB_GENRE_NAMES
 
 api_bp = Blueprint('api', __name__)
@@ -15,6 +15,7 @@ def tmdb():
     )
 
 
+# ── SEARCH / DISCOVER ────────────────────────────────────────────────────────
 @api_bp.route('/search')
 @login_required
 def search():
@@ -46,30 +47,20 @@ def discover():
     sort_by = request.args.get('sort_by', 'popularity.desc')
     page = int(request.args.get('page', 1))
 
-    # Build genre list with proper AND logic:
-    # - If user picked a specific genre from dropdown → use it as strict AND filter
-    # - If user picked moods → take only the PRIMARY genre from each mood
-    # - Multiple genres = AND (must match ALL) for precision
-    strict_genres = list(genre_ids)  # explicitly chosen genres
+    strict_genres = list(genre_ids)
     mood_genres = []
     for mood in moods:
         primary = MOOD_GENRE_MAP.get(mood, {}).get('genres', [])
         if primary:
-            mood_genres.append(primary[0])  # only the #1 genre per mood
-
-    # Combine: explicit genres take priority, mood genres supplement
-    all_genres = list(dict.fromkeys(strict_genres + mood_genres))  # dedupe, preserve order
+            mood_genres.append(primary[0])
+    all_genres = list(dict.fromkeys(strict_genres + mood_genres))
 
     lang = INDUSTRY_LANGUAGE_MAP.get(industry.lower())
 
-    # For TV + language: don't stack genres (too restrictive), just use language
     if media_type == 'tv' and lang and all_genres:
-        # Try with genre first
         results = client.discover(media_type, genre_ids=all_genres[:1],
                                   language=lang, year_from=year_from,
-                                  year_to=year_to, sort_by=sort_by, page=page,
-                                  genre_logic='AND')
-        # If empty, drop genre and just filter by language
+                                  year_to=year_to, sort_by=sort_by, page=page, genre_logic='AND')
         if not results:
             results = client.discover(media_type, genre_ids=None,
                                       language=lang, year_from=year_from,
@@ -77,8 +68,7 @@ def discover():
     else:
         results = client.discover(media_type, genre_ids=all_genres or None,
                                   language=lang, year_from=year_from,
-                                  year_to=year_to, sort_by=sort_by, page=page,
-                                  genre_logic='AND')
+                                  year_to=year_to, sort_by=sort_by, page=page, genre_logic='AND')
     return jsonify(results)
 
 
@@ -179,7 +169,7 @@ def rate():
         existing.score = data['score']
         db.session.commit()
         return jsonify(existing.to_dict())
-    # Try to enrich genre_ids and language from watchlist if not supplied
+
     genre_ids_raw = data.get('genre_ids', [])
     orig_lang = data.get('original_language', '')
     title = data.get('title', '')
@@ -210,19 +200,25 @@ def rate():
     return jsonify(r.to_dict()), 201
 
 
-# ── FRIENDS ───────────────────────────────────────────────────────────────────
-@api_bp.route('/friends', methods=['GET'])
+# ── FRIEND REQUESTS ───────────────────────────────────────────────────────────
+@api_bp.route('/friend-requests', methods=['GET'])
 @login_required
-def get_friends():
-    result = []
-    my_ratings = [r.to_dict() for r in current_user.ratings]
-    my_watched = [w.tmdb_id for w in WatchlistItem.query.filter_by(user_id=current_user.id, watched=True).all()]
-    for f in current_user.friends.all():
-        f_ratings = [r.to_dict() for r in f.ratings]
-        f_watched = [w.tmdb_id for w in WatchlistItem.query.filter_by(user_id=f.id, watched=True).all()]
-        score = tmdb().compatibility(my_ratings, f_ratings, my_watched, f_watched)
-        result.append({**f.to_dict(), 'compatibility': score})
-    return jsonify(result)
+def get_friend_requests():
+    """Get pending incoming friend requests"""
+    requests_in = FriendRequest.query.filter_by(
+        receiver_id=current_user.id, status='pending'
+    ).all()
+    return jsonify([r.to_dict() for r in requests_in])
+
+
+@api_bp.route('/friend-requests/sent', methods=['GET'])
+@login_required
+def get_sent_requests():
+    """Get pending outgoing requests"""
+    requests_out = FriendRequest.query.filter_by(
+        sender_id=current_user.id, status='pending'
+    ).all()
+    return jsonify([r.to_dict() for r in requests_out])
 
 
 @api_bp.route('/friends/add', methods=['POST'])
@@ -237,10 +233,81 @@ def add_friend():
         return jsonify({'error': 'Cannot add yourself'}), 400
     if current_user.friends.filter_by(id=user.id).first():
         return jsonify({'error': 'Already friends'}), 400
-    current_user.friends.append(user)
-    user.friends.append(current_user)
+
+    # Check if request already sent
+    existing = FriendRequest.query.filter_by(
+        sender_id=current_user.id, receiver_id=user.id, status='pending'
+    ).first()
+    if existing:
+        return jsonify({'error': 'Request already sent'}), 400
+
+    # Check if they already sent us a request — auto-accept
+    reverse = FriendRequest.query.filter_by(
+        sender_id=user.id, receiver_id=current_user.id, status='pending'
+    ).first()
+    if reverse:
+        reverse.status = 'accepted'
+        current_user.friends.append(user)
+        user.friends.append(current_user)
+        db.session.commit()
+        return jsonify({'success': True, 'auto_accepted': True, 'friend': user.to_dict()})
+
+    # Create new request
+    fr = FriendRequest(sender_id=current_user.id, receiver_id=user.id)
+    db.session.add(fr)
     db.session.commit()
-    return jsonify({'success': True, 'friend': user.to_dict()})
+    return jsonify({'success': True, 'pending': True, 'message': f'Friend request sent to {username}'})
+
+
+@api_bp.route('/friend-requests/<int:request_id>/accept', methods=['POST'])
+@login_required
+def accept_request(request_id):
+    fr = FriendRequest.query.get_or_404(request_id)
+    if fr.receiver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    fr.status = 'accepted'
+    sender = User.query.get(fr.sender_id)
+    current_user.friends.append(sender)
+    sender.friends.append(current_user)
+    db.session.commit()
+    return jsonify({'success': True, 'friend': sender.to_dict()})
+
+
+@api_bp.route('/friend-requests/<int:request_id>/reject', methods=['POST'])
+@login_required
+def reject_request(request_id):
+    fr = FriendRequest.query.get_or_404(request_id)
+    if fr.receiver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    fr.status = 'rejected'
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/friends', methods=['GET'])
+@login_required
+def get_friends():
+    result = []
+    my_ratings = [r.to_dict() for r in current_user.ratings]
+    my_watched = [w.tmdb_id for w in WatchlistItem.query.filter_by(user_id=current_user.id, watched=True).all()]
+    my_watchlist_genres = []
+    for w in WatchlistItem.query.filter_by(user_id=current_user.id).all():
+        for g in (w.genre_ids or '').split(','):
+            if g.strip().isdigit():
+                my_watchlist_genres.append(int(g.strip()))
+
+    for f in current_user.friends.all():
+        f_ratings = [r.to_dict() for r in f.ratings]
+        f_watched = [w.tmdb_id for w in WatchlistItem.query.filter_by(user_id=f.id, watched=True).all()]
+        f_watchlist_genres = []
+        for w in WatchlistItem.query.filter_by(user_id=f.id).all():
+            for g in (w.genre_ids or '').split(','):
+                if g.strip().isdigit():
+                    f_watchlist_genres.append(int(g.strip()))
+        score = tmdb().compatibility(my_ratings, f_ratings, my_watched, f_watched,
+                                     my_watchlist_genres, f_watchlist_genres)
+        result.append({**f.to_dict(), 'compatibility': score})
+    return jsonify(result)
 
 
 @api_bp.route('/friends/<int:friend_id>/compatibility')
@@ -251,7 +318,11 @@ def compatibility(friend_id):
     f_ratings = [r.to_dict() for r in friend.ratings]
     my_watched = [w.tmdb_id for w in WatchlistItem.query.filter_by(user_id=current_user.id, watched=True).all()]
     f_watched = [w.tmdb_id for w in WatchlistItem.query.filter_by(user_id=friend.id, watched=True).all()]
-    score = tmdb().compatibility(my_ratings, f_ratings, my_watched, f_watched)
+    my_wg = [int(g.strip()) for w in WatchlistItem.query.filter_by(user_id=current_user.id).all()
+             for g in (w.genre_ids or '').split(',') if g.strip().isdigit()]
+    f_wg = [int(g.strip()) for w in WatchlistItem.query.filter_by(user_id=friend.id).all()
+            for g in (w.genre_ids or '').split(',') if g.strip().isdigit()]
+    score = tmdb().compatibility(my_ratings, f_ratings, my_watched, f_watched, my_wg, f_wg)
     return jsonify({'score': score, 'friend': friend.to_dict()})
 
 
@@ -262,20 +333,54 @@ def for_us(friend_id):
     my_ratings = [r.to_dict() for r in current_user.ratings]
     f_ratings = [r.to_dict() for r in friend.ratings]
     media_type = request.args.get('media_type', 'movie')
-    return jsonify(tmdb().for_us(my_ratings, f_ratings, media_type))
+    # Get more results — fetch 3 pages and combine
+    results = tmdb().for_us(my_ratings, f_ratings, media_type, count=20)
+    return jsonify(results)
+
+
+@api_bp.route('/friends/<int:friend_id>/remove', methods=['POST'])
+@login_required
+def remove_friend(friend_id):
+    friend = User.query.get_or_404(friend_id)
+    current_user.friends.filter(User.id == friend_id).delete()
+    friend.friends.filter(User.id == current_user.id).delete()
+    db.session.commit()
+    return jsonify({'success': True})
 
 
 # ── SHARED WATCHLIST ──────────────────────────────────────────────────────────
+@api_bp.route('/shared-watchlist', methods=['GET'])
+@login_required
+def get_shared_lists():
+    lists = SharedWatchlist.query.filter(
+        (SharedWatchlist.creator_id == current_user.id) |
+        (SharedWatchlist.friend_id == current_user.id)
+    ).all()
+    return jsonify([sl.to_dict() for sl in lists])
+
+
 @api_bp.route('/shared-watchlist', methods=['POST'])
 @login_required
 def create_shared():
     data = request.get_json()
     friend = User.query.get_or_404(data['friend_id'])
-    sw = SharedWatchlist(name=data.get('name', f"List with {friend.username}"),
-                         creator_id=current_user.id, friend_id=friend.id)
+    sw = SharedWatchlist(
+        name=data.get('name', f"List with {friend.username}"),
+        creator_id=current_user.id,
+        friend_id=friend.id
+    )
     db.session.add(sw)
     db.session.commit()
     return jsonify(sw.to_dict()), 201
+
+
+@api_bp.route('/shared-watchlist/<int:list_id>', methods=['GET'])
+@login_required
+def get_shared_list(list_id):
+    sw = SharedWatchlist.query.get_or_404(list_id)
+    if current_user.id not in [sw.creator_id, sw.friend_id]:
+        return jsonify({'error': 'Unauthorized'}), 403
+    return jsonify(sw.to_dict())
 
 
 @api_bp.route('/shared-watchlist/<int:list_id>/item', methods=['POST'])
@@ -285,15 +390,46 @@ def add_to_shared(list_id):
     if current_user.id not in [sw.creator_id, sw.friend_id]:
         return jsonify({'error': 'Unauthorized'}), 403
     data = request.get_json()
+    # Check duplicate
+    existing = SharedWatchlistItem.query.filter_by(
+        list_id=list_id, tmdb_id=data['tmdb_id']
+    ).first()
+    if existing:
+        return jsonify({'error': 'Already in list'}), 400
     item = SharedWatchlistItem(
-        list_id=list_id, added_by=current_user.id,
-        tmdb_id=data['tmdb_id'], media_type=data.get('media_type', 'movie'),
-        title=data.get('title', ''), poster_path=data.get('poster_path'),
+        list_id=list_id,
+        added_by=current_user.id,
+        tmdb_id=data['tmdb_id'],
+        media_type=data.get('media_type', 'movie'),
+        title=data.get('title', ''),
+        poster_path=data.get('poster_path'),
         vote_average=data.get('vote_average', 0)
     )
     db.session.add(item)
     db.session.commit()
     return jsonify(item.to_dict()), 201
+
+
+@api_bp.route('/shared-watchlist/<int:list_id>/item/<int:item_id>/watched', methods=['PATCH'])
+@login_required
+def mark_shared_watched(list_id, item_id):
+    item = SharedWatchlistItem.query.get_or_404(item_id)
+    data = request.get_json()
+    item.watched = data.get('watched', True)
+    db.session.commit()
+    return jsonify(item.to_dict())
+
+
+@api_bp.route('/shared-watchlist/<int:list_id>/item/<int:item_id>', methods=['DELETE'])
+@login_required
+def remove_from_shared(list_id, item_id):
+    item = SharedWatchlistItem.query.get_or_404(item_id)
+    sw = SharedWatchlist.query.get_or_404(list_id)
+    if current_user.id not in [sw.creator_id, sw.friend_id]:
+        return jsonify({'error': 'Unauthorized'}), 403
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({'success': True})
 
 
 # ── ANALYTICS ─────────────────────────────────────────────────────────────────
@@ -319,7 +455,6 @@ def analytics():
                 if name:
                     genre_counts[name] = genre_counts.get(name, 0) + 1
 
-    # Also pull genre data from watchlist items (covers users who haven't rated yet)
     for w in watchlist:
         for gid in (w.genre_ids or '').split(','):
             gid = gid.strip()
@@ -328,8 +463,7 @@ def analytics():
                 if name:
                     genre_counts[name] = genre_counts.get(name, 0) + 1
         if w.original_language:
-            lang = w.original_language
-            lang_counts[lang] = lang_counts.get(lang, 0) + 1
+            lang_counts[w.original_language] = lang_counts.get(w.original_language, 0) + 1
         if w.watched and w.watched_at:
             key = w.watched_at.strftime('%Y-%m')
             monthly[key] = monthly.get(key, 0) + 1
