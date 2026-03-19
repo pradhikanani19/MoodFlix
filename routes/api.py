@@ -347,9 +347,9 @@ def for_us(friend_id):
             f_ratings.append({'tmdb_id': w.tmdb_id, 'score': 3,
                                'genre_ids': w.genre_ids or '', 'original_language': w.original_language or ''})
     media_type = request.args.get('media_type', 'movie')
-    count = int(request.args.get('count', 24))
+    count = int(request.args.get('count', 50))
     results = tmdb().for_us(my_ratings, f_ratings, media_type, count=count)
-    # If still empty (new users with no data), return trending
+    # Fallback: return trending if no data at all
     if not results:
         results = tmdb().trending(media_type, 'week')[:count]
     return jsonify(results)

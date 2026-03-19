@@ -207,7 +207,7 @@ async function selectFriend(fid, fname, fcolor) {
   try {
     const [cd, fd] = await Promise.all([
       fetch(`/api/friends/${fid}/compatibility`).then(r => r.json()),
-      fetch(`/api/friends/${fid}/for-us?count=24`).then(r => r.json())
+      fetch(`/api/friends/${fid}/for-us?count=50`).then(r => r.json())
     ]);
     const sc = cd.score;
     const col = sc >= 70 ? 'var(--peach-deep)' : sc >= 40 ? 'var(--peach-dark)' : 'var(--t2)';
@@ -236,11 +236,14 @@ async function selectFriend(fid, fname, fcolor) {
         </div>
       </div>
       <div class="fp-tabs">
-        <button class="fp-tab active" onclick="fpTab(this,'fp-for-us')">🎯 Find For Us (${fd.length})</button>
+        <button class="fp-tab active" onclick="fpTab(this,'fp-for-us')">🎯 Find For Us (${fd.length} picks)</button>
         <button class="fp-tab" onclick="fpTab(this,'fp-shared-wl')">📝 Shared Watchlist</button>
       </div>
       <div id="fp-for-us" class="fp-content">
-        <p style="font-size:13px;color:var(--t3);margin-bottom:16px;font-weight:500">Top picks neither of you has seen, based on your combined taste</p>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <p style="font-size:13px;color:var(--t3);font-weight:500;margin:0">Top picks neither of you has seen — ranked by combined taste match</p>
+          <span style="font-size:11px;font-weight:700;color:var(--peach-dark);background:var(--accent-dim);border:1px solid var(--accent-bdr);padding:3px 10px;border-radius:50px">${fd.length} results</span>
+        </div>
         ${cardsHtml}
       </div>
       <div id="fp-shared-wl" class="fp-content" style="display:none">
