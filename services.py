@@ -222,71 +222,61 @@ class TMDBClient:
 
     # ── FOR US — Smart joint recommendation engine ────────────────────────────
     def for_us(self, user1_ratings, user2_ratings, media_type='movie', count=50, year_from=None, year_to=None):
-        """
-        Find movies/series both users will enjoy.
-        Simple, reliable, accurate algorithm:
-        1. Build genre taste profile for each user from their ratings+watchlist
-        2. Find genres BOTH users like (intersection)
-        3. Fetch from TMDB by those shared genres with quality filters
-        4. Score each result and sort by how much both users would enjoy it
-        5. Strictly apply year filter if set
-        """
         from collections import Counter
 
-        # Step 1: Build genre profiles
-        def get_genres(r):
+        # Build genre taste profile from ratings
+        def parse_genres(r):
             raw = r.get('genre_ids') or ''
             if isinstance(raw, list):
                 return [int(x) for x in raw if str(x).strip().isdigit()]
             return [int(x.strip()) for x in str(raw).split(',') if x.strip().isdigit()]
 
-        def build_genre_profile(ratings):
-            """Returns Counter of genre_id -> total weight based on ratings"""
-            profile = Counter()
-            weights = {5: 3, 4: 2, 3: 1, 2: 0, 1: 0}  # only count positive ratings
+        def build_profile(ratings):
+            p = Counter()
+            wmap = {5: 3, 4: 2, 3: 1, 2: 0, 1: 0}
             for r in ratings:
-                w = weights.get(int(r.get('score', 3)), 1)
+                w = wmap.get(int(r.get('score', 3)), 1)
                 if w <= 0:
                     continue
-                for g in get_genres(r):
-                    profile[g] += w
-            return profile
+                for g in parse_genres(r):
+                    p[g] += w
+            return p
 
-        p1 = build_genre_profile(user1_ratings)
-        p2 = build_genre_profile(user2_ratings)
+        p1 = build_profile(user1_ratings)
+        p2 = build_profile(user2_ratings)
 
-        # Step 2: Find shared genres — genres BOTH users have watched and liked
+        # Shared genres — both users like them
         shared = {}
         for g in set(p1) | set(p2):
-            w1 = p1.get(g, 0)
-            w2 = p2.get(g, 0)
+            w1, w2 = p1.get(g, 0), p2.get(g, 0)
             if w1 > 0 and w2 > 0:
-                shared[g] = min(w1, w2)  # take the minimum — both must like it
+                shared[g] = min(w1, w2)
 
-        # Fallback if no overlap — use popular genres
+        # Fallback when users have no taste data yet
         if not shared:
-            shared = {35: 3, 10749: 3, 28: 2, 18: 2, 878: 1, 53: 1, 9648: 1, 12: 1}
+            shared = {35: 3, 10749: 3, 28: 2, 18: 2, 878: 1, 53: 1}
 
-        # Top genres sorted by shared weight
         top_genres = [g for g, _ in sorted(shared.items(), key=lambda x: x[1], reverse=True)][:6]
+        total_shared = sum(shared.values()) or 1
+        p1_total = sum(p1.values()) or 1
+        p2_total = sum(p2.values()) or 1
 
-        # Already seen by either user — exclude
+        # IDs to exclude — already rated or watchlisted by either user
         exclude = {r['tmdb_id'] for r in user1_ratings + user2_ratings}
 
-        # Step 3: Collect candidates from TMDB
-        pool = {}  # tmdb_id -> item
+        # Collect candidates from TMDB
+        pool = {}
 
         def collect(items):
             for item in items:
                 tid = item.get('tmdb_id')
                 if not tid or tid in exclude or tid in pool:
                     continue
-                # Quality filter
                 if item.get('vote_average', 0) < 6.0:
                     continue
                 if item.get('vote_count', 0) < 50:
                     continue
-                # Year filter — strict
+                # Strict year filter
                 if year_from or year_to:
                     rel = (item.get('release_date') or '').strip()
                     if not rel or len(rel) < 4:
@@ -301,86 +291,71 @@ class TMDBClient:
                         continue
                 pool[tid] = item
 
-        # Fetch from top shared genres — popularity sort (most reliable)
+        yd = {}
+        if year_from:
+            yd['year_from'] = year_from
+        if year_to:
+            yd['year_to'] = year_to
+
+        # Fetch from each shared genre — popularity sort
         for gid in top_genres:
             for pg in range(1, 6):
-                collect(self.discover(
-                    media_type, genre_ids=[gid],
-                    sort_by='popularity.desc', page=pg,
-                    genre_logic='OR', min_votes=100,
-                    year_from=year_from, year_to=year_to
-                ))
+                collect(self.discover(media_type, genre_ids=[gid],
+                                      sort_by='popularity.desc', page=pg,
+                                      genre_logic='OR', min_votes=100, **yd))
                 if len(pool) >= count * 5:
                     break
 
-        # Also fetch by vote_average for acclaimed films (min 300 votes so no obscure junk)
+        # Also fetch by rating (with high vote threshold to avoid junk)
         for gid in top_genres[:4]:
             for pg in range(1, 4):
-                collect(self.discover(
-                    media_type, genre_ids=[gid],
-                    sort_by='vote_average.desc', page=pg,
-                    genre_logic='OR', min_votes=300,
-                    year_from=year_from, year_to=year_to
-                ))
+                collect(self.discover(media_type, genre_ids=[gid],
+                                      sort_by='vote_average.desc', page=pg,
+                                      genre_logic='OR', min_votes=500, **yd))
 
-        # Genre pair combos (AND) for precise matches e.g. RomCom
+        # Genre pair combos (AND) — precise matches e.g. RomCom
         for i in range(min(3, len(top_genres))):
-            for j in range(i+1, min(5, len(top_genres))):
-                collect(self.discover(
-                    media_type, genre_ids=[top_genres[i], top_genres[j]],
-                    sort_by='popularity.desc', page=1,
-                    genre_logic='AND', min_votes=100,
-                    year_from=year_from, year_to=year_to
-                ))
+            for j in range(i + 1, min(5, len(top_genres))):
+                collect(self.discover(media_type,
+                                      genre_ids=[top_genres[i], top_genres[j]],
+                                      sort_by='popularity.desc', page=1,
+                                      genre_logic='AND', min_votes=100, **yd))
 
-        # Step 4: Score every candidate
-        total_shared = sum(shared.values()) or 1
-
-        def score_item(item):
+        # Score each candidate
+        scored = []
+        for item in pool.values():
             raw = item.get('genre_ids', [])
             if isinstance(raw, list):
                 gids = set(int(g) for g in raw if str(g).strip().isdigit())
             else:
                 gids = set(int(g.strip()) for g in str(raw).split(',') if g.strip().isdigit())
 
-            # How well does this match shared taste?
+            # Shared taste match
             shared_match = sum(shared.get(g, 0) for g in gids) / total_shared
 
-            # How much does User 1 like it personally?
-            p1_total = sum(p1.values()) or 1
-            u1_match = sum(p1.get(g, 0) for g in gids) / p1_total
+            # Per-user taste match
+            u1 = sum(p1.get(g, 0) for g in gids) / p1_total
+            u2 = sum(p2.get(g, 0) for g in gids) / p2_total
 
-            # How much does User 2 like it personally?
-            p2_total = sum(p2.values()) or 1
-            u2_match = sum(p2.get(g, 0) for g in gids) / p2_total
+            if u1 <= 0 or u2 <= 0:
+                continue
 
-            # Harmonic mean of user scores — BOTH must enjoy it
-            if u1_match > 0 and u2_match > 0:
-                both_like = 2 * u1_match * u2_match / (u1_match + u2_match)
-            else:
-                return 0  # if either user won't like it, skip
+            # Harmonic mean — both must enjoy it
+            both = 2 * u1 * u2 / (u1 + u2)
 
-            # Quality bonus
+            # Quality and popularity
             rating = item.get('vote_average', 6)
-            quality = max(0, (rating - 6.0) / 4.0)
+            quality = max(0.0, (rating - 6.0) / 4.0)
+            pop_raw = max(float(item.get('popularity', 1)), 1.0)
+            pop = min(math.log(pop_raw) / math.log(500), 1.0)
 
-            # Popularity (log scale)
-            pop = min(math.log1p(item.get('popularity', 1)) / math.log1p(500), 1.0)
-
-            return shared_match * 0.40 + both_like * 0.35 + quality * 0.15 + pop * 0.10
-
-        # Score and sort
-        scored = []
-        for item in pool.values():
-            s = score_item(item)
-            if s > 0:
-                item['_s'] = s
-                scored.append(item)
+            score = shared_match * 0.40 + both * 0.35 + quality * 0.15 + pop * 0.10
+            item['_s'] = score
+            scored.append(item)
 
         scored.sort(key=lambda x: x['_s'], reverse=True)
         for item in scored:
             item.pop('_s', None)
-
         return scored[:count]
 
     # ── COMPATIBILITY ─────────────────────────────────────────────────────────
