@@ -9,18 +9,22 @@ load_dotenv()
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'moodflix-secret-2024')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///moodflix.db'
+
+    # Use PostgreSQL on Render (DATABASE_URL set as env var), SQLite locally
+    database_url = os.getenv('DATABASE_URL', 'sqlite:///moodflix.db')
+    # Render gives postgres:// but SQLAlchemy needs postgresql://
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['TMDB_API_KEY'] = os.getenv('TMDB_API_KEY', '')
     app.config['TMDB_BASE_URL'] = 'https://api.themoviedb.org/3'
     app.config['TMDB_IMG_BASE'] = 'https://image.tmdb.org/t/p/w500'
 
-    # Init extensions
     db.init_app(app)
     login_manager.init_app(app)
     bcrypt.init_app(app)
 
-    # Register blueprints
     from routes.auth import auth_bp
     from routes.main import main_bp
     from routes.api import api_bp
@@ -29,9 +33,8 @@ def create_app():
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix='/api')
 
-    # Create tables
     with app.app_context():
-        import models  # noqa - registers user_loader
+        import models  # noqa
         db.create_all()
 
     return app
